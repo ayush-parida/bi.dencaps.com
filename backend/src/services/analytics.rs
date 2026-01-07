@@ -38,7 +38,7 @@ impl AnalyticsService {
 
         self.db
             .queries_collection()
-            .insert_one(&query, None)
+            .insert_one(&query)
             .await
             .map_err(|e| format!("Failed to create query: {}", e))?;
 
@@ -50,7 +50,7 @@ impl AnalyticsService {
         
         let query = self.db
             .queries_collection()
-            .find_one(doc! { "query_id": &uuid_str }, None)
+            .find_one(doc! { "query_id": &uuid_str })
             .await
             .map_err(|e| format!("Database error: {}", e))?
             .ok_or_else(|| "Query not found".to_string())?;
@@ -60,8 +60,7 @@ impl AnalyticsService {
             .queries_collection()
             .update_one(
                 doc! { "query_id": &uuid_str },
-                doc! { "$set": { "status": "Processing" } },
-                None,
+                doc! { "$set": { "status": "Processing" } }
             )
             .await
             .map_err(|e| format!("Failed to update query status: {}", e))?;
@@ -79,8 +78,7 @@ impl AnalyticsService {
                             "status": "Failed",
                             "response_text": format!("Error: {}", e),
                             "completed_at": DateTime::now()
-                        } },
-                        None,
+                        } }
                     )
                     .await
                     .map_err(|e| format!("Failed to update query: {}", e))?;
@@ -98,8 +96,7 @@ impl AnalyticsService {
                     "status": "Completed",
                     "response_text": &response,
                     "completed_at": DateTime::now()
-                } },
-                None,
+                } }
             )
             .await
             .map_err(|e| format!("Failed to update query: {}", e))?;
@@ -112,7 +109,7 @@ impl AnalyticsService {
         
         self.db
             .queries_collection()
-            .find_one(doc! { "query_id": uuid_str }, None)
+            .find_one(doc! { "query_id": uuid_str })
             .await
             .map_err(|e| format!("Database error: {}", e))?
             .ok_or_else(|| "Query not found".to_string())
@@ -125,7 +122,7 @@ impl AnalyticsService {
 
         let cursor = self.db
             .queries_collection()
-            .find(doc! { "project_id": uuid_str }, None)
+            .find(doc! { "project_id": uuid_str })
             .await
             .map_err(|e| format!("Database error: {}", e))?;
 

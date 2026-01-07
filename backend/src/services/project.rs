@@ -35,7 +35,7 @@ impl ProjectService {
 
         self.db
             .projects_collection()
-            .insert_one(&project, None)
+            .insert_one(&project)
             .await
             .map_err(|e| format!("Failed to create project: {}", e))?;
 
@@ -47,7 +47,7 @@ impl ProjectService {
         
         self.db
             .projects_collection()
-            .find_one(doc! { "project_id": uuid_str }, None)
+            .find_one(doc! { "project_id": uuid_str })
             .await
             .map_err(|e| format!("Database error: {}", e))?
             .ok_or_else(|| "Project not found".to_string())
@@ -58,7 +58,7 @@ impl ProjectService {
 
         let cursor = self.db
             .projects_collection()
-            .find(doc! { "tenant_id": tenant_id }, None)
+            .find(doc! { "tenant_id": tenant_id })
             .await
             .map_err(|e| format!("Database error: {}", e))?;
 
@@ -88,8 +88,7 @@ impl ProjectService {
                         { "owner_id": &uuid_str },
                         { "member_ids": &uuid_str }
                     ]
-                },
-                None,
+                }
             )
             .await
             .map_err(|e| format!("Database error: {}", e))?;

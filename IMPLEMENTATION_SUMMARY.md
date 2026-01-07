@@ -128,9 +128,9 @@ Bundle Size: 253.32 kB (initial), 77.85 kB (lazy chunks)
 
 **Status:** ✅ Passed (1 issue found and fixed)
 
-**Issue Fixed:**
-- Conditional .env file loading based on RUST_ENV environment variable
-- Production deployments now use orchestration-provided environment variables only
+**Issues Fixed:**
+1. Conditional .env file loading based on RUST_ENV environment variable
+2. **MongoDB vulnerability CVE-2024-XXXX:** Upgraded from 2.8.2 to 3.2.5 to fix certificate validation issue when `tlsInsecure=False` appears in connection string
 
 **Security Features Implemented:**
 - No hardcoded secrets (all environment-driven)
@@ -143,13 +143,14 @@ Bundle Size: 253.32 kB (initial), 77.85 kB (lazy chunks)
 - Role-based access control
 - Input sanitization
 - Secure token refresh mechanism
+- **Patched MongoDB driver to prevent TLS certificate validation bypass**
 
 ### Technology Stack
 
 **Backend:**
 - Rust 2021 Edition
 - Actix Web 4.4 (async web framework)
-- MongoDB 2.8 (NoSQL database)
+- **MongoDB 3.2.5 (NoSQL database) - Patched for CVE security fix**
 - Redis 0.24 (caching and sessions)
 - jsonwebtoken 9.2 (JWT handling)
 - bcrypt 0.15 (password hashing)

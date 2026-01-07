@@ -17,7 +17,7 @@ impl UserService {
         // Check if user already exists
         let existing = self.db
             .users_collection()
-            .find_one(doc! { "email": &dto.email }, None)
+            .find_one(doc! { "email": &dto.email })
             .await
             .map_err(|e| format!("Database error: {}", e))?;
 
@@ -43,7 +43,7 @@ impl UserService {
 
         self.db
             .users_collection()
-            .insert_one(&user, None)
+            .insert_one(&user)
             .await
             .map_err(|e| format!("Failed to create user: {}", e))?;
 
@@ -53,7 +53,7 @@ impl UserService {
     pub async fn authenticate(&self, email: &str, password: &str) -> Result<User, String> {
         let user = self.db
             .users_collection()
-            .find_one(doc! { "email": email }, None)
+            .find_one(doc! { "email": email })
             .await
             .map_err(|e| format!("Database error: {}", e))?
             .ok_or_else(|| "Invalid email or password".to_string())?;
@@ -75,7 +75,7 @@ impl UserService {
         
         self.db
             .users_collection()
-            .find_one(doc! { "user_id": uuid_str }, None)
+            .find_one(doc! { "user_id": uuid_str })
             .await
             .map_err(|e| format!("Database error: {}", e))?
             .ok_or_else(|| "User not found".to_string())
@@ -86,7 +86,7 @@ impl UserService {
 
         let cursor = self.db
             .users_collection()
-            .find(doc! { "tenant_id": tenant_id }, None)
+            .find(doc! { "tenant_id": tenant_id })
             .await
             .map_err(|e| format!("Database error: {}", e))?;
 

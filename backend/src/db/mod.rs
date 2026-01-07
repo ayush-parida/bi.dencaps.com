@@ -20,7 +20,7 @@ impl DatabaseManager {
         let db = client.database(&config.mongodb_database);
 
         // Test MongoDB connection
-        db.run_command(mongodb::bson::doc! { "ping": 1 }, None)
+        db.run_command(mongodb::bson::doc! { "ping": 1 })
             .await
             .map_err(|e| format!("MongoDB ping failed: {}", e))?;
 
@@ -69,7 +69,7 @@ impl DatabaseManager {
             .build();
 
         self.users_collection()
-            .create_indexes(vec![user_email_index, user_tenant_index], None)
+            .create_indexes(vec![user_email_index, user_tenant_index])
             .await
             .map_err(|e| format!("Failed to create user indexes: {}", e))?;
 
@@ -83,7 +83,7 @@ impl DatabaseManager {
             .build();
 
         self.projects_collection()
-            .create_indexes(vec![project_tenant_index, project_owner_index], None)
+            .create_indexes(vec![project_tenant_index, project_owner_index])
             .await
             .map_err(|e| format!("Failed to create project indexes: {}", e))?;
 
@@ -97,7 +97,7 @@ impl DatabaseManager {
             .build();
 
         self.queries_collection()
-            .create_indexes(vec![query_project_index, query_user_index], None)
+            .create_indexes(vec![query_project_index, query_user_index])
             .await
             .map_err(|e| format!("Failed to create query indexes: {}", e))?;
 
