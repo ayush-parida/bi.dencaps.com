@@ -19,7 +19,10 @@ pub struct Config {
 
 impl Config {
     pub fn from_env() -> Result<Self, String> {
-        dotenv::dotenv().ok();
+        // Only load .env file in development (when RUST_ENV is not production)
+        if std::env::var("RUST_ENV").unwrap_or_else(|_| "development".to_string()) != "production" {
+            dotenv::dotenv().ok();
+        }
 
         let server_host = env::var("SERVER_HOST")
             .unwrap_or_else(|_| "127.0.0.1".to_string());

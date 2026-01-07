@@ -92,10 +92,11 @@ cargo build --release
 
 2. **Configure Production Environment:**
 ```bash
-# Create production .env file
+# Create production .env file (only used if RUST_ENV != production)
 cp .env.example .env.production
 
-# Set production values
+# Set production environment variables (recommended approach)
+export RUST_ENV=production  # Prevents loading .env file
 export RUST_LOG=info
 export SERVER_HOST=0.0.0.0
 export SERVER_PORT=8080
@@ -125,6 +126,7 @@ After=network.target
 Type=simple
 User=dencapsbi
 WorkingDirectory=/opt/dencapsbi
+Environment="RUST_ENV=production"
 EnvironmentFile=/opt/dencapsbi/.env
 ExecStart=/opt/dencapsbi/dencapsbi-backend
 Restart=always
