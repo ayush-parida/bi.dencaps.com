@@ -1,0 +1,76 @@
+<div class="dashboard-container">
+  <nav class="navbar">
+    <div class="nav-brand">
+      <h2>DencapsBI</h2>
+    </div>
+    <div class="nav-menu">
+      <a routerLink="/dashboard" routerLinkActive="active">Dashboard</a>
+      <a routerLink="/projects" routerLinkActive="active">Projects</a>
+      <a routerLink="/analytics" routerLinkActive="active">Analytics</a>
+    </div>
+    <div class="nav-user">
+      <span *ngIf="currentUser">{{ currentUser.name }}</span>
+      <button (click)="logout()">Logout</button>
+    </div>
+  </nav>
+
+  <div class="dashboard-content">
+    <div class="welcome-section">
+      <h1>Welcome to DencapsBI</h1>
+      <p *ngIf="currentUser">Hello, {{ currentUser.name }}! Start analyzing your data with AI-powered insights.</p>
+    </div>
+
+    <div class="stats-grid">
+      <div class="stat-card">
+        <h3>{{ projects.length }}</h3>
+        <p>Active Projects</p>
+      </div>
+      <div class="stat-card">
+        <h3>{{ currentUser?.tenant_id || 'N/A' }}</h3>
+        <p>Organization ID</p>
+      </div>
+      <div class="stat-card">
+        <h3>{{ currentUser?.role || 'N/A' }}</h3>
+        <p>Your Role</p>
+      </div>
+    </div>
+
+    <div class="projects-section">
+      <div class="section-header">
+        <h2>Your Projects</h2>
+        <a routerLink="/projects" class="btn-primary">View All Projects</a>
+      </div>
+
+      <div *ngIf="isLoading" class="loading">Loading projects...</div>
+
+      <div *ngIf="!isLoading && projects.length === 0" class="empty-state">
+        <p>No projects yet. Create your first project to get started!</p>
+        <a routerLink="/projects" class="btn-primary">Create Project</a>
+      </div>
+
+      <div *ngIf="!isLoading && projects.length > 0" class="projects-grid">
+        <div *ngFor="let project of projects.slice(0, 3)" class="project-card">
+          <h3>{{ project.name }}</h3>
+          <p>{{ project.description }}</p>
+          <div class="project-meta">
+            <span>Created: {{ project.created_at | date:'short' }}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="quick-actions">
+      <h2>Quick Actions</h2>
+      <div class="actions-grid">
+        <a routerLink="/projects" class="action-card">
+          <h3>Create Project</h3>
+          <p>Start a new analytics project</p>
+        </a>
+        <a routerLink="/analytics" class="action-card">
+          <h3>Run Query</h3>
+          <p>Ask AI about your data</p>
+        </a>
+      </div>
+    </div>
+  </div>
+</div>

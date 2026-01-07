@@ -46,9 +46,11 @@ impl AnalyticsService {
     }
 
     pub async fn process_query(&self, query_id: &Uuid) -> Result<String, String> {
-        let mut query = self.db
+        let uuid_str = query_id.to_string();
+        
+        let query = self.db
             .queries_collection()
-            .find_one(doc! { "query_id": query_id }, None)
+            .find_one(doc! { "query_id": &uuid_str }, None)
             .await
             .map_err(|e| format!("Database error: {}", e))?
             .ok_or_else(|| "Query not found".to_string())?;
@@ -57,7 +59,7 @@ impl AnalyticsService {
         self.db
             .queries_collection()
             .update_one(
-                doc! { "query_id": query_id },
+                doc! { "query_id": &uuid_str },
                 doc! { "$set": { "status": "Processing" } },
                 None,
             )
@@ -72,7 +74,7 @@ impl AnalyticsService {
                 self.db
                     .queries_collection()
                     .update_one(
-                        doc! { "query_id": query_id },
+                        doc! { "query_id": &uuid_str },
                         doc! { "$set": { 
                             "status": "Failed",
                             "response_text": format!("Error: {}", e),
@@ -91,7 +93,7 @@ impl AnalyticsService {
         self.db
             .queries_collection()
             .update_one(
-                doc! { "query_id": query_id },
+                doc! { "query_id": &uuid_str },
                 doc! { "$set": { 
                     "status": "Completed",
                     "response_text": &response,
@@ -106,9 +108,11 @@ impl AnalyticsService {
     }
 
     pub async fn get_query_by_id(&self, query_id: &Uuid) -> Result<AnalyticsQuery, String> {
+        let uuid_str = query_id.to_string();
+        
         self.db
             .queries_collection()
-            .find_one(doc! { "query_id": query_id }, None)
+            .find_one(doc! { "query_id": uuid_str }, None)
             .await
             .map_err(|e| format!("Database error: {}", e))?
             .ok_or_else(|| "Query not found".to_string())
@@ -116,10 +120,12 @@ impl AnalyticsService {
 
     pub async fn get_project_queries(&self, project_id: &Uuid) -> Result<Vec<AnalyticsQuery>, String> {
         use futures::stream::TryStreamExt;
+        
+        let uuid_str = project_id.to_string();
 
         let cursor = self.db
             .queries_collection()
-            .find(doc! { "project_id": project_id }, None)
+            .find(doc! { "project_id": uuid_str }, None)
             .await
             .map_err(|e| format!("Database error: {}", e))?;
 

@@ -35,7 +35,6 @@ impl UserRole {
 pub struct User {
     #[serde(rename = "_id", skip_serializing_if = "Option::is_none")]
     pub id: Option<ObjectId>,
-    #[serde(with = "bson::serde_helpers::uuid_1_as_binary")]
     pub user_id: uuid::Uuid,
     pub email: String,
     pub password_hash: String,
@@ -69,12 +68,10 @@ pub struct LoginDto {
 pub struct Project {
     #[serde(rename = "_id", skip_serializing_if = "Option::is_none")]
     pub id: Option<ObjectId>,
-    #[serde(with = "bson::serde_helpers::uuid_1_as_binary")]
     pub project_id: uuid::Uuid,
     pub name: String,
     pub description: String,
     pub tenant_id: String,
-    #[serde(with = "bson::serde_helpers::uuid_1_as_binary")]
     pub owner_id: uuid::Uuid,
     pub member_ids: Vec<String>,
     pub is_active: bool,
@@ -93,11 +90,8 @@ pub struct CreateProjectDto {
 pub struct AnalyticsQuery {
     #[serde(rename = "_id", skip_serializing_if = "Option::is_none")]
     pub id: Option<ObjectId>,
-    #[serde(with = "bson::serde_helpers::uuid_1_as_binary")]
     pub query_id: uuid::Uuid,
-    #[serde(with = "bson::serde_helpers::uuid_1_as_binary")]
     pub project_id: uuid::Uuid,
-    #[serde(with = "bson::serde_helpers::uuid_1_as_binary")]
     pub user_id: uuid::Uuid,
     pub query_text: String,
     pub response_text: Option<String>,

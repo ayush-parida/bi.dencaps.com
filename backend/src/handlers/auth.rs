@@ -1,4 +1,4 @@
-use actix_web::{web, HttpResponse, HttpRequest};
+use actix_web::{web, HttpResponse, HttpRequest, HttpMessage};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use validator::Validate;
@@ -121,7 +121,8 @@ pub async fn get_current_user(
     user_service: web::Data<UserService>,
     req: HttpRequest,
 ) -> HttpResponse {
-    let claims = match req.extensions().get::<Claims>() {
+    let extensions = req.extensions();
+    let claims = match extensions.get::<Claims>() {
         Some(c) => c.clone(),
         None => {
             return HttpResponse::Unauthorized().json(ErrorResponse {

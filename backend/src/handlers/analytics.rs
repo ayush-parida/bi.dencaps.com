@@ -1,4 +1,4 @@
-use actix_web::{web, HttpResponse, HttpRequest};
+use actix_web::{web, HttpResponse, HttpRequest, HttpMessage};
 use serde::Serialize;
 use validator::Validate;
 use crate::models::CreateQueryDto;
@@ -22,7 +22,8 @@ pub async fn create_query(
         });
     }
 
-    let claims = match req.extensions().get::<Claims>() {
+    let extensions = req.extensions();
+    let claims = match extensions.get::<Claims>() {
         Some(c) => c.clone(),
         None => {
             return HttpResponse::Unauthorized().json(ErrorResponse {
@@ -74,7 +75,8 @@ pub async fn process_query(
     query_id: web::Path<String>,
     req: HttpRequest,
 ) -> HttpResponse {
-    let claims = match req.extensions().get::<Claims>() {
+    let extensions = req.extensions();
+    let claims = match extensions.get::<Claims>() {
         Some(c) => c.clone(),
         None => {
             return HttpResponse::Unauthorized().json(ErrorResponse {
@@ -107,7 +109,8 @@ pub async fn get_query_by_id(
     query_id: web::Path<String>,
     req: HttpRequest,
 ) -> HttpResponse {
-    let claims = match req.extensions().get::<Claims>() {
+    let extensions = req.extensions();
+    let claims = match extensions.get::<Claims>() {
         Some(c) => c.clone(),
         None => {
             return HttpResponse::Unauthorized().json(ErrorResponse {
@@ -164,7 +167,8 @@ pub async fn get_project_queries(
     project_id: web::Path<String>,
     req: HttpRequest,
 ) -> HttpResponse {
-    let claims = match req.extensions().get::<Claims>() {
+    let extensions = req.extensions();
+    let claims = match extensions.get::<Claims>() {
         Some(c) => c.clone(),
         None => {
             return HttpResponse::Unauthorized().json(ErrorResponse {

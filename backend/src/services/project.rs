@@ -43,9 +43,11 @@ impl ProjectService {
     }
 
     pub async fn get_project_by_id(&self, project_id: &Uuid) -> Result<Project, String> {
+        let uuid_str = project_id.to_string();
+        
         self.db
             .projects_collection()
-            .find_one(doc! { "project_id": project_id }, None)
+            .find_one(doc! { "project_id": uuid_str }, None)
             .await
             .map_err(|e| format!("Database error: {}", e))?
             .ok_or_else(|| "Project not found".to_string())
@@ -74,6 +76,8 @@ impl ProjectService {
         tenant_id: &str,
     ) -> Result<Vec<ProjectResponse>, String> {
         use futures::stream::TryStreamExt;
+        
+        let uuid_str = user_id.to_string();
 
         let cursor = self.db
             .projects_collection()
@@ -81,8 +85,8 @@ impl ProjectService {
                 doc! {
                     "tenant_id": tenant_id,
                     "$or": [
-                        { "owner_id": user_id },
-                        { "member_ids": user_id.to_string() }
+                        { "owner_id": &uuid_str },
+                        { "member_ids": &uuid_str }
                     ]
                 },
                 None,

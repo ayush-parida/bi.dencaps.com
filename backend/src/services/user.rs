@@ -71,9 +71,11 @@ impl UserService {
     }
 
     pub async fn get_user_by_id(&self, user_id: &Uuid) -> Result<User, String> {
+        let uuid_str = user_id.to_string();
+        
         self.db
             .users_collection()
-            .find_one(doc! { "user_id": user_id }, None)
+            .find_one(doc! { "user_id": uuid_str }, None)
             .await
             .map_err(|e| format!("Database error: {}", e))?
             .ok_or_else(|| "User not found".to_string())

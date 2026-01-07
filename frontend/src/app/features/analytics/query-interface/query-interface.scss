@@ -1,0 +1,258 @@
+.analytics-container {
+  min-height: 100vh;
+  background: #f5f7fa;
+}
+
+.navbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem 2rem;
+  background: white;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+
+  .nav-brand h2 {
+    margin: 0;
+    color: #667eea;
+  }
+
+  .nav-menu {
+    display: flex;
+    gap: 2rem;
+
+    a {
+      color: #333;
+      text-decoration: none;
+      font-weight: 500;
+      padding: 0.5rem 1rem;
+      border-radius: 4px;
+      transition: all 0.3s;
+
+      &:hover, &.active {
+        background: #f0f2f5;
+        color: #667eea;
+      }
+    }
+  }
+
+  .nav-user button {
+    padding: 0.5rem 1rem;
+    background: #e74c3c;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-weight: 500;
+
+    &:hover {
+      background: #c0392b;
+    }
+  }
+}
+
+.analytics-content {
+  padding: 2rem;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.header-section {
+  margin-bottom: 2rem;
+
+  h1 {
+    margin: 0 0 0.5rem 0;
+    color: #333;
+  }
+
+  p {
+    margin: 0;
+    color: #666;
+  }
+}
+
+.query-section {
+  background: white;
+  padding: 2rem;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  margin-bottom: 2rem;
+
+  .form-group {
+    margin-bottom: 1.5rem;
+
+    label {
+      display: block;
+      margin-bottom: 0.5rem;
+      color: #333;
+      font-weight: 500;
+    }
+
+    select, textarea {
+      width: 100%;
+      padding: 0.75rem;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      font-size: 1rem;
+      box-sizing: border-box;
+
+      &:focus {
+        outline: none;
+        border-color: #667eea;
+      }
+    }
+
+    select {
+      background: white;
+    }
+  }
+
+  button[type="submit"] {
+    width: 100%;
+    padding: 0.75rem;
+    background: #667eea;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    font-size: 1rem;
+    font-weight: 500;
+    cursor: pointer;
+
+    &:hover:not(:disabled) {
+      background: #5568d3;
+    }
+
+    &:disabled {
+      background: #ccc;
+      cursor: not-allowed;
+    }
+  }
+}
+
+.response-section {
+  background: white;
+  padding: 2rem;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  margin-bottom: 2rem;
+
+  h2 {
+    margin: 0 0 1rem 0;
+    color: #333;
+  }
+
+  .response-card {
+    background: #f8f9fa;
+    padding: 1.5rem;
+    border-radius: 4px;
+    border-left: 4px solid #667eea;
+
+    pre {
+      margin: 0;
+      white-space: pre-wrap;
+      word-wrap: break-word;
+      color: #333;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    }
+  }
+}
+
+.history-section {
+  h2 {
+    margin: 0 0 1.5rem 0;
+    color: #333;
+  }
+}
+
+.queries-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.query-card {
+  background: white;
+  padding: 1.5rem;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+
+  .query-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+
+    .status {
+      padding: 0.25rem 0.75rem;
+      border-radius: 12px;
+      font-size: 0.875rem;
+      font-weight: 500;
+
+      &.status-completed {
+        background: #d4edda;
+        color: #155724;
+      }
+
+      &.status-processing {
+        background: #fff3cd;
+        color: #856404;
+      }
+
+      &.status-pending {
+        background: #cce5ff;
+        color: #004085;
+      }
+
+      &.status-failed {
+        background: #f8d7da;
+        color: #721c24;
+      }
+    }
+
+    .date {
+      color: #999;
+      font-size: 0.875rem;
+    }
+  }
+
+  .query-text {
+    margin-bottom: 1rem;
+    color: #333;
+
+    strong {
+      color: #667eea;
+    }
+  }
+
+  .query-response {
+    padding-top: 1rem;
+    border-top: 1px solid #eee;
+
+    strong {
+      color: #667eea;
+      display: block;
+      margin-bottom: 0.5rem;
+    }
+
+    pre {
+      margin: 0;
+      white-space: pre-wrap;
+      word-wrap: break-word;
+      background: #f8f9fa;
+      padding: 1rem;
+      border-radius: 4px;
+      color: #333;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    }
+  }
+}
+
+.empty-state {
+  text-align: center;
+  padding: 3rem;
+  color: #666;
+}
+
+.error-message {
+  color: #e74c3c;
+  margin-bottom: 1rem;
+}

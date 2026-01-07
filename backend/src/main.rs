@@ -57,15 +57,19 @@ async fn main() -> std::io::Result<()> {
 
     let jwt_manager_data = web::Data::new(jwt_manager.clone());
     let redis = db_manager.redis.clone();
+    let cors_origins = config.cors_allowed_origins.clone();
+    let rate_limit_requests = config.rate_limit_requests;
+    let rate_limit_window_secs = config.rate_limit_window_secs;
 
     log::info!("All services initialized successfully");
 
     // Start HTTP server
     HttpServer::new(move || {
         // Configure CORS
+        let cors_origins_clone = cors_origins.clone();
         let cors = Cors::default()
-            .allowed_origin_fn(|origin, _req_head| {
-                config.cors_allowed_origins.iter().any(|allowed| {
+            .allowed_origin_fn(move |origin, _req_head| {
+                cors_origins_clone.iter().any(|allowed| {
                     origin.as_bytes() == allowed.as_bytes()
                 })
             })
@@ -97,8 +101,8 @@ async fn main() -> std::io::Result<()> {
                     .wrap(middleware::AuthMiddleware::new(jwt_manager.clone()))
                     .wrap(middleware::RateLimitMiddleware::new(
                         redis.clone(),
-                        config.rate_limit_requests,
-                        config.rate_limit_window_secs,
+                        rate_limit_requests,
+                        rate_limit_window_secs,
                     ))
                     .service(
                         web::scope("/users")

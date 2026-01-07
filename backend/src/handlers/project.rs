@@ -1,4 +1,4 @@
-use actix_web::{web, HttpResponse, HttpRequest};
+use actix_web::{web, HttpResponse, HttpRequest, HttpMessage};
 use serde::Serialize;
 use std::sync::Arc;
 use validator::Validate;
@@ -22,7 +22,8 @@ pub async fn create_project(
         });
     }
 
-    let claims = match req.extensions().get::<Claims>() {
+    let extensions = req.extensions();
+    let claims = match extensions.get::<Claims>() {
         Some(c) => c.clone(),
         None => {
             return HttpResponse::Unauthorized().json(ErrorResponse {
@@ -53,7 +54,8 @@ pub async fn get_user_projects(
     project_service: web::Data<ProjectService>,
     req: HttpRequest,
 ) -> HttpResponse {
-    let claims = match req.extensions().get::<Claims>() {
+    let extensions = req.extensions();
+    let claims = match extensions.get::<Claims>() {
         Some(c) => c.clone(),
         None => {
             return HttpResponse::Unauthorized().json(ErrorResponse {
@@ -85,7 +87,8 @@ pub async fn get_project_by_id(
     project_id: web::Path<String>,
     req: HttpRequest,
 ) -> HttpResponse {
-    let claims = match req.extensions().get::<Claims>() {
+    let extensions = req.extensions();
+    let claims = match extensions.get::<Claims>() {
         Some(c) => c.clone(),
         None => {
             return HttpResponse::Unauthorized().json(ErrorResponse {

@@ -1,0 +1,34 @@
+version: '3.8'
+
+services:
+  mongodb:
+    image: mongo:latest
+    container_name: dencapsbi-mongodb
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_DATABASE: dencapsbi
+    volumes:
+      - mongodb_data:/data/db
+    networks:
+      - dencapsbi-network
+
+  redis:
+    image: redis:alpine
+    container_name: dencapsbi-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - dencapsbi-network
+
+volumes:
+  mongodb_data:
+    driver: local
+  redis_data:
+    driver: local
+
+networks:
+  dencapsbi-network:
+    driver: bridge
