@@ -1,0 +1,91 @@
+<div class="analytics-container">
+  <nav class="navbar">
+    <div class="nav-brand">
+      <h2>DencapsBI</h2>
+    </div>
+    <div class="nav-menu">
+      <a routerLink="/dashboard" routerLinkActive="active">Dashboard</a>
+      <a routerLink="/projects" routerLinkActive="active">Projects</a>
+      <a routerLink="/analytics" routerLinkActive="active">Analytics</a>
+    </div>
+    <div class="nav-user">
+      <button (click)="logout()">Logout</button>
+    </div>
+  </nav>
+
+  <div class="analytics-content">
+    <div class="header-section">
+      <h1>AI Analytics Query</h1>
+      <p>Ask questions about your data and get AI-powered insights</p>
+    </div>
+
+    <div class="query-section">
+      <form [formGroup]="queryForm" (ngSubmit)="onSubmit()">
+        <div class="form-group">
+          <label for="project_id">Select Project</label>
+          <select
+            id="project_id"
+            formControlName="project_id"
+            (change)="onProjectChange($event)"
+          >
+            <option value="">Choose a project...</option>
+            <option *ngFor="let project of projects" [value]="project.project_id">
+              {{ project.name }}
+            </option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label for="query_text">Your Question</label>
+          <textarea
+            id="query_text"
+            formControlName="query_text"
+            placeholder="Ask a question about your data, request insights, or generate analytics..."
+            rows="4"
+          ></textarea>
+        </div>
+
+        <div class="error-message" *ngIf="errorMessage">
+          {{ errorMessage }}
+        </div>
+
+        <button type="submit" [disabled]="queryForm.invalid || isProcessing">
+          {{ isProcessing ? 'Processing...' : 'Run Query' }}
+        </button>
+      </form>
+    </div>
+
+    <div *ngIf="currentResponse" class="response-section">
+      <h2>AI Response</h2>
+      <div class="response-card">
+        <pre>{{ currentResponse }}</pre>
+      </div>
+    </div>
+
+    <div class="history-section">
+      <h2>Query History</h2>
+
+      <div *ngIf="queries.length === 0" class="empty-state">
+        <p>No queries yet. Ask your first question above!</p>
+      </div>
+
+      <div *ngIf="queries.length > 0" class="queries-list">
+        <div *ngFor="let query of queries" class="query-card">
+          <div class="query-header">
+            <span class="status" [class]="'status-' + query.status.toLowerCase()">
+              {{ query.status }}
+            </span>
+            <span class="date">{{ query.created_at | date:'short' }}</span>
+          </div>
+          <div class="query-text">
+            <strong>Question:</strong> {{ query.query_text }}
+          </div>
+          <div *ngIf="query.response_text" class="query-response">
+            <strong>Response:</strong>
+            <pre>{{ query.response_text }}</pre>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
