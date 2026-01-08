@@ -104,3 +104,13 @@ export interface Conversation {
   updated_at: string;
 }
 
+/** Lightweight conversation summary for list views (without messages) */
+export interface ConversationSummary {
+  conversation_id: string;
+  project_id: string;
+  title: string;
+  message_count: number;
+  created_at: string;
+  updated_at: string;
+}
+

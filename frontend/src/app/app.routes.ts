@@ -34,10 +34,6 @@ export const routes: Routes = [
         loadComponent: () => import('./features/projects/project-list/project-list').then(m => m.ProjectList)
       },
       {
-        path: 'analytics',
-        loadComponent: () => import('./features/analytics/query-interface/query-interface').then(m => m.QueryInterface)
-      },
-      {
         path: 'chat',
         loadComponent: () => import('./features/chat/chat-interface/chat-interface').then(m => m.ChatInterfaceComponent)
       }

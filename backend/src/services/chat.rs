@@ -172,6 +172,35 @@ impl ChatService {
         Ok(conversations)
     }
 
+    /// Get lightweight conversation summaries (without messages) for a project
+    pub async fn get_project_conversation_summaries(
+        &self,
+        project_id: &Uuid,
+        user_id: &Uuid,
+    ) -> Result<Vec<crate::models::ConversationSummary>, String> {
+        let collection = self.db_manager.conversations_collection();
+        let filter = doc! {
+            "project_id": project_id.to_string(),
+            "user_id": user_id.to_string(),
+        };
+
+        let mut cursor = collection
+            .find(filter)
+            .await
+            .map_err(|e| format!("Database error: {}", e))?;
+
+        let mut summaries = Vec::new();
+        use futures::StreamExt;
+        while let Some(result) = cursor.next().await {
+            match result {
+                Ok(conv) => summaries.push(conv.into()),
+                Err(e) => log::warn!("Failed to parse conversation: {}", e),
+            }
+        }
+
+        Ok(summaries)
+    }
+
     async fn save_conversation(&self, conversation: &Conversation) -> Result<(), String> {
         let collection = self.db_manager.conversations_collection();
         

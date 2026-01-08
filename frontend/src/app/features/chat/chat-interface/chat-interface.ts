@@ -1,17 +1,18 @@
-import { Component, OnInit, OnDestroy, inject, signal, effect } from '@angular/core';
+import { Component, OnInit, OnDestroy, inject, signal, computed } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { ActivatedRoute } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import { Subject, takeUntil } from 'rxjs';
 import { ChatService } from '../../../core/services/chat.service';
 import { ProjectService } from '../../../core/services/project.service';
-import { ChatMessage, Conversation, Project } from '../../../core/models';
+import { ChatMessage, Project } from '../../../core/models';
 import { ContentRendererComponent } from '../../../shared/rendering';
+import { MarkdownRendererComponent } from '../../../shared/markdown-renderer/markdown-renderer.component';
 
 @Component({
   selector: 'app-chat-interface',
   standalone: true,
-  imports: [CommonModule, FormsModule, ContentRendererComponent],
+  imports: [CommonModule, FormsModule, ContentRendererComponent, MarkdownRendererComponent],
   templateUrl: './chat-interface.html',
   styleUrls: ['./chat-interface.scss']
 })
@@ -19,37 +20,56 @@ export class ChatInterfaceComponent implements OnInit, OnDestroy {
   private readonly chatService = inject(ChatService);
   private readonly projectService = inject(ProjectService);
   private readonly route = inject(ActivatedRoute);
+  private readonly router = inject(Router);
   private readonly destroy$ = new Subject<void>();
 
   projectId = signal<string | null>(null);
   project = signal<Project | null>(null);
+  projects = signal<Project[]>([]);
   currentConversationId = signal<string | null>(null);
-  conversations = signal<Conversation[]>([]);
   messages = signal<ChatMessage[]>([]);
-  messageInput = ''; // Regular property for ngModel
+  
+  // Computed chat title from first user message
+  chatTitle = computed(() => {
+    const msgs = this.messages();
+    const firstUserMsg = msgs.find(m => m.role === 'user');
+    if (firstUserMsg) {
+      const title = firstUserMsg.content.substring(0, 60);
+      return title.length < firstUserMsg.content.length ? title + '...' : title;
+    }
+    return 'New Chat';
+  });
+  
+  messageInput = '';
   isLoading = signal<boolean>(false);
   isSending = signal<boolean>(false);
   error = signal<string | null>(null);
 
-  constructor() {
-    // Effect to load conversations when project changes
-    effect(() => {
-      const pid = this.projectId();
-      if (pid) {
-        this.loadConversations(pid);
-      }
-    });
-  }
-
   ngOnInit(): void {
-    // Get project ID from route
+    // Load all projects
+    this.loadProjects();
+    
+    // Listen to route changes for project and conversation selection
     this.route.queryParams.pipe(takeUntil(this.destroy$)).subscribe(params => {
       const pid = params['projectId'];
-      if (pid) {
+      const convId = params['conversationId'];
+      
+      if (pid && pid !== this.projectId()) {
         this.projectId.set(pid);
         this.loadProject(pid);
-      } else {
-        this.error.set('No project ID provided');
+      }
+      
+      if (convId && convId !== this.currentConversationId()) {
+        this.currentConversationId.set(convId);
+        this.loadConversation(convId);
+      } else if (!convId && this.currentConversationId()) {
+        // New chat - clear messages
+        this.currentConversationId.set(null);
+        this.messages.set([]);
+      }
+      
+      if (!pid) {
+        this.error.set(null); // Don't show error, just show project selector
       }
     });
   }
@@ -59,12 +79,43 @@ export class ChatInterfaceComponent implements OnInit, OnDestroy {
     this.destroy$.complete();
   }
 
+  loadProjects(): void {
+    this.projectService.getProjects()
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: (projects) => {
+          this.projects.set(projects);
+        },
+        error: (err) => {
+          console.error('Failed to load projects:', err);
+        }
+      });
+  }
+
+  onProjectChange(projectId: string): void {
+    this.projectId.set(projectId);
+    this.currentConversationId.set(null);
+    this.messages.set([]);
+    this.error.set(null);
+    
+    if (projectId) {
+      this.loadProject(projectId);
+      this.router.navigate(['/chat'], { 
+        queryParams: { projectId } 
+      });
+    } else {
+      this.project.set(null);
+      this.router.navigate(['/chat']);
+    }
+  }
+
   loadProject(projectId: string): void {
     this.projectService.getProjectById(projectId)
       .pipe(takeUntil(this.destroy$))
       .subscribe({
         next: (project) => {
           this.project.set(project);
+          this.error.set(null);
         },
         error: (err) => {
           this.error.set(`Failed to load project: ${err.message}`);
@@ -72,49 +123,21 @@ export class ChatInterfaceComponent implements OnInit, OnDestroy {
       });
   }
 
-  loadConversations(projectId: string): void {
-    this.isLoading.set(true);
-    this.chatService.getProjectConversations(projectId)
-      .pipe(takeUntil(this.destroy$))
-      .subscribe({
-        next: (conversations) => {
-          this.conversations.set(conversations);
-          this.isLoading.set(false);
-          
-          // If there are conversations, load the most recent one
-          if (conversations.length > 0) {
-            const mostRecent = conversations.sort((a, b) => 
-              new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
-            )[0];
-            this.loadConversation(mostRecent.conversation_id);
-          }
-        },
-        error: (err) => {
-          this.error.set(`Failed to load conversations: ${err.message}`);
-          this.isLoading.set(false);
-        }
-      });
-  }
-
   loadConversation(conversationId: string): void {
-    this.currentConversationId.set(conversationId);
+    this.isLoading.set(true);
     this.chatService.getConversation(conversationId)
       .pipe(takeUntil(this.destroy$))
       .subscribe({
         next: (conversation) => {
           this.messages.set(conversation.messages);
           this.error.set(null);
+          this.isLoading.set(false);
         },
         error: (err) => {
           this.error.set(`Failed to load conversation: ${err.message}`);
+          this.isLoading.set(false);
         }
       });
-  }
-
-  startNewConversation(): void {
-    this.currentConversationId.set(null);
-    this.messages.set([]);
-    this.error.set(null);
   }
 
   sendMessage(): void {
@@ -145,21 +168,16 @@ export class ChatInterfaceComponent implements OnInit, OnDestroy {
       .subscribe({
         next: (response) => {
           // Update conversation ID if it's a new conversation
-          const isNewConversation = !this.currentConversationId();
-          if (isNewConversation) {
+          if (!this.currentConversationId()) {
             this.currentConversationId.set(response.conversation_id);
-            
-            // Add the new conversation to the list without full reload
-            const newConv: Conversation = {
-              conversation_id: response.conversation_id,
-              project_id: pid,
-              user_id: '', // Will be filled by backend
-              title: message.length > 50 ? message.substring(0, 47) + '...' : message,
-              messages: [...this.messages(), response.message],
-              created_at: new Date().toISOString(),
-              updated_at: new Date().toISOString()
-            };
-            this.conversations.update(convs => [newConv, ...convs]);
+            // Update URL with new conversation ID
+            this.router.navigate([], {
+              queryParams: { 
+                projectId: pid, 
+                conversationId: response.conversation_id 
+              },
+              queryParamsHandling: 'merge'
+            });
           }
 
           // Add AI response to messages

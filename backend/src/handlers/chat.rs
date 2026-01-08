@@ -254,3 +254,75 @@ pub async fn get_project_conversations(
         }
     }
 }
+
+/// Get lightweight conversation summaries for a project (without message content)
+pub async fn get_project_conversation_summaries(
+    chat_service: web::Data<ChatService>,
+    project_service: web::Data<ProjectService>,
+    req: HttpRequest,
+    path: web::Path<String>,
+) -> HttpResponse {
+    // Get user from JWT claims
+    let claims = match req.extensions().get::<Claims>() {
+        Some(c) => c.clone(),
+        None => {
+            return HttpResponse::Unauthorized().json(ErrorResponse {
+                error: "Unauthorized".to_string(),
+            });
+        }
+    };
+
+    // Parse user_id from claims
+    let user_id = match Uuid::parse_str(&claims.user_id) {
+        Ok(id) => id,
+        Err(_) => {
+            return HttpResponse::BadRequest().json(ErrorResponse {
+                error: "Invalid user_id".to_string(),
+            });
+        }
+    };
+
+    // Parse project_id
+    let project_id = match Uuid::parse_str(&path.into_inner()) {
+        Ok(id) => id,
+        Err(_) => {
+            return HttpResponse::BadRequest().json(ErrorResponse {
+                error: "Invalid project_id format".to_string(),
+            });
+        }
+    };
+
+    // Verify user has access to the project
+    match project_service
+        .get_project_by_id(&project_id)
+        .await
+    {
+        Ok(project) => {
+            // Check if user has access to this project
+            if project.tenant_id != claims.tenant_id {
+                return HttpResponse::Forbidden().json(ErrorResponse {
+                    error: "Access denied to this project".to_string(),
+                });
+            }
+        }
+        Err(e) => {
+            return HttpResponse::NotFound().json(ErrorResponse {
+                error: format!("Project not found: {}", e),
+            });
+        }
+    }
+
+    // Get conversation summaries
+    match chat_service
+        .get_project_conversation_summaries(&project_id, &user_id)
+        .await
+    {
+        Ok(summaries) => HttpResponse::Ok().json(summaries),
+        Err(e) => {
+            log::error!("Failed to get project conversation summaries: {}", e);
+            HttpResponse::InternalServerError().json(ErrorResponse {
+                error: format!("Failed to get conversations: {}", e),
+            })
+        }
+    }
+}

@@ -104,10 +104,21 @@ impl ProjectService {
         Ok(projects.into_iter().map(ProjectResponse::from).collect())
     }
 
-    pub async fn check_user_access(&self, project_id: &Uuid, user_id: &Uuid) -> Result<bool, String> {
+    pub async fn check_user_access(
+        &self,
+        project_id: &Uuid,
+        user_id: &Uuid,
+        role: &str,
+        tenant_id: &str,
+    ) -> Result<bool, String> {
         let project = self.get_project_by_id(project_id).await?;
-        let user_id_str = user_id.to_string();
         
+        // Admin users can access any project in their tenant
+        if role == "admin" && project.tenant_id == tenant_id {
+            return Ok(true);
+        }
+        
+        let user_id_str = user_id.to_string();
         Ok(project.owner_id == user_id_str || 
            project.member_ids.contains(&user_id_str))
     }

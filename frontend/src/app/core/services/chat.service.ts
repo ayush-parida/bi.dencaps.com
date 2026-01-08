@@ -2,7 +2,7 @@ import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable, catchError, throwError } from 'rxjs';
 import { environment } from '../../../environments/environment';
-import { ChatResponse, Conversation, SendMessageRequest, ApiError } from '../models';
+import { ChatResponse, Conversation, ConversationSummary, SendMessageRequest, ApiError } from '../models';
 
 @Injectable({
   providedIn: 'root'
@@ -27,6 +27,14 @@ export class ChatService {
 
   getProjectConversations(projectId: string): Observable<Conversation[]> {
     return this.http.get<Conversation[]>(`${this.baseUrl}/projects/${projectId}/conversations`)
+      .pipe(
+        catchError(this.handleError)
+      );
+  }
+
+  /** Get lightweight conversation summaries for sidebar (without full messages) */
+  getProjectConversationSummaries(projectId: string): Observable<ConversationSummary[]> {
+    return this.http.get<ConversationSummary[]>(`${this.baseUrl}/projects/${projectId}/conversations/summaries`)
       .pipe(
         catchError(this.handleError)
       );

@@ -73,10 +73,25 @@ pub async fn get_user_projects(
         }
     };
 
-    match project_service
-        .get_user_projects(&user_id, &claims.tenant_id)
-        .await
-    {
+    // Admin users can see all projects in their tenant (case-insensitive check)
+    log::info!("User role: '{}', checking admin access", claims.role);
+    let result = if claims.role.to_lowercase() == "admin" {
+        log::info!("Admin user detected, fetching all tenant projects for tenant_id: {}", claims.tenant_id);
+        project_service
+            .get_projects_by_tenant(&claims.tenant_id)
+            .await
+    } else {
+        project_service
+            .get_user_projects(&user_id, &claims.tenant_id)
+            .await
+    };
+
+    match result {
+        Ok(ref projects) => log::info!("Found {} projects", projects.len()),
+        Err(ref e) => log::error!("Error fetching projects: {}", e),
+    }
+
+    match result {
         Ok(projects) => HttpResponse::Ok().json(projects),
         Err(e) => HttpResponse::InternalServerError().json(ErrorResponse { error: e }),
     }
@@ -116,7 +131,7 @@ pub async fn get_project_by_id(
     };
 
     // Check access
-    match project_service.check_user_access(&project_uuid, &user_id).await {
+    match project_service.check_user_access(&project_uuid, &user_id, &claims.role, &claims.tenant_id).await {
         Ok(has_access) => {
             if !has_access {
                 return HttpResponse::Forbidden().json(ErrorResponse {

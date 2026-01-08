@@ -51,7 +51,7 @@ pub async fn create_query(
         }
     };
 
-    match project_service.check_user_access(&project_id, &user_id).await {
+    match project_service.check_user_access(&project_id, &user_id, &claims.role, &claims.tenant_id).await {
         Ok(has_access) => {
             if !has_access {
                 return HttpResponse::Forbidden().json(ErrorResponse {
@@ -155,7 +155,7 @@ pub async fn get_query_by_id(
     };
 
     // Check project access
-    match project_service.check_user_access(&project_uuid, &user_id).await {
+    match project_service.check_user_access(&project_uuid, &user_id, &claims.role, &claims.tenant_id).await {
         Ok(has_access) => {
             if !has_access {
                 return HttpResponse::Forbidden().json(ErrorResponse {
@@ -206,7 +206,7 @@ pub async fn get_project_queries(
     };
 
     // Check project access
-    match project_service.check_user_access(&project_uuid, &user_id).await {
+    match project_service.check_user_access(&project_uuid, &user_id, &claims.role, &claims.tenant_id).await {
         Ok(has_access) => {
             if !has_access {
                 return HttpResponse::Forbidden().json(ErrorResponse {

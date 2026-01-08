@@ -248,6 +248,30 @@ pub struct ConversationResponse {
     pub updated_at: String,
 }
 
+/// Lightweight conversation summary for list views (without messages)
+#[derive(Debug, Serialize)]
+pub struct ConversationSummary {
+    pub conversation_id: String,
+    pub project_id: String,
+    pub title: String,
+    pub message_count: usize,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+impl From<Conversation> for ConversationSummary {
+    fn from(conv: Conversation) -> Self {
+        ConversationSummary {
+            conversation_id: conv.conversation_id.to_string(),
+            project_id: conv.project_id.to_string(),
+            title: conv.title,
+            message_count: conv.messages.len(),
+            created_at: conv.created_at.to_string(),
+            updated_at: conv.updated_at.to_string(),
+        }
+    }
+}
+
 impl From<ChatMessage> for ChatMessageResponse {
     fn from(msg: ChatMessage) -> Self {
         ChatMessageResponse {
