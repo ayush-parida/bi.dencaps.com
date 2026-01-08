@@ -6,10 +6,11 @@ import { AnalyticsService } from '../../../core/services/analytics.service';
 import { ProjectService } from '../../../core/services/project.service';
 import { AuthService } from '../../../core/services/auth.service';
 import { Project, AnalyticsQuery } from '../../../core/models';
+import { ContentRendererComponent } from '../../../shared/rendering';
 
 @Component({
   selector: 'app-query-interface',
-  imports: [CommonModule, ReactiveFormsModule, RouterLink],
+  imports: [CommonModule, ReactiveFormsModule, RouterLink, ContentRendererComponent],
   templateUrl: './query-interface.html',
   styleUrl: './query-interface.scss',
 })
@@ -116,5 +117,13 @@ export class QueryInterface implements OnInit {
 
   logout(): void {
     this.authService.logout();
+  }
+
+  tryParseStructuredResponse(response: string): any {
+    try {
+      return JSON.parse(response);
+    } catch {
+      return null;
+    }
   }
 }

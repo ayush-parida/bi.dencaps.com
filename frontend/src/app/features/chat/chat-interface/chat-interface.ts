@@ -6,11 +6,12 @@ import { Subject, takeUntil } from 'rxjs';
 import { ChatService } from '../../../core/services/chat.service';
 import { ProjectService } from '../../../core/services/project.service';
 import { ChatMessage, Conversation, Project } from '../../../core/models';
+import { ContentRendererComponent } from '../../../shared/rendering';
 
 @Component({
   selector: 'app-chat-interface',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, ContentRendererComponent],
   templateUrl: './chat-interface.html',
   styleUrls: ['./chat-interface.scss']
 })
@@ -205,5 +206,17 @@ export class ChatInterfaceComponent implements OnInit, OnDestroy {
 
   trackByIndex(index: number): number {
     return index;
+  }
+
+  isStructuredContent(message: ChatMessage): boolean {
+    return !!message.structured_content;
+  }
+
+  tryParseStructuredContent(content: string): any {
+    try {
+      return JSON.parse(content);
+    } catch {
+      return null;
+    }
   }
 }
