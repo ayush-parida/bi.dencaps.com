@@ -1,0 +1,44 @@
+<div class="app-layout">
+  <aside class="sidebar">
+    <div class="sidebar-brand">
+      <h2>DencapsBI</h2>
+    </div>
+
+    <nav class="sidebar-nav">
+      <a routerLink="/dashboard" routerLinkActive="active" class="nav-item">
+        <span class="nav-icon">📊</span>
+        <span class="nav-label">Dashboard</span>
+      </a>
+      <a routerLink="/projects" routerLinkActive="active" class="nav-item">
+        <span class="nav-icon">📁</span>
+        <span class="nav-label">Projects</span>
+      </a>
+      <a routerLink="/analytics" routerLinkActive="active" class="nav-item">
+        <span class="nav-icon">🔍</span>
+        <span class="nav-label">Analytics</span>
+      </a>
+      <a routerLink="/chat" routerLinkActive="active" class="nav-item">
+        <span class="nav-icon">💬</span>
+        <span class="nav-label">Chat</span>
+      </a>
+    </nav>
+
+    <div class="sidebar-footer">
+      <div class="user-info" *ngIf="currentUser$ | async as user">
+        <span class="user-avatar">👤</span>
+        <div class="user-details">
+          <span class="user-name">{{ user.name }}</span>
+          <span class="user-role">{{ user.role }}</span>
+        </div>
+      </div>
+      <button class="logout-btn" (click)="logout()">
+        <span class="nav-icon">🚪</span>
+        <span class="nav-label">Logout</span>
+      </button>
+    </div>
+  </aside>
+
+  <main class="main-content">
+    <router-outlet></router-outlet>
+  </main>
+</div>

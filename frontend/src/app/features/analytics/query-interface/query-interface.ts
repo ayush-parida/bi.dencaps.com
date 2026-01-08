@@ -4,7 +4,6 @@ import { FormBuilder, FormGroup, Validators, ReactiveFormsModule } from '@angula
 import { RouterLink } from '@angular/router';
 import { AnalyticsService } from '../../../core/services/analytics.service';
 import { ProjectService } from '../../../core/services/project.service';
-import { AuthService } from '../../../core/services/auth.service';
 import { Project, AnalyticsQuery } from '../../../core/models';
 import { ContentRendererComponent } from '../../../shared/rendering';
 
@@ -17,7 +16,6 @@ import { ContentRendererComponent } from '../../../shared/rendering';
 export class QueryInterface implements OnInit {
   private readonly analyticsService = inject(AnalyticsService);
   private readonly projectService = inject(ProjectService);
-  private readonly authService = inject(AuthService);
   private readonly fb = inject(FormBuilder);
   private readonly cdr = inject(ChangeDetectorRef);
 
@@ -113,10 +111,6 @@ export class QueryInterface implements OnInit {
         this.cdr.detectChanges();
       }
     });
-  }
-
-  logout(): void {
-    this.authService.logout();
   }
 
   tryParseStructuredResponse(response: string): any {

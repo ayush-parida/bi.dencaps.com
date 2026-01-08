@@ -1,6 +1,6 @@
 import { Component, inject, OnInit, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { Router, RouterLink } from '@angular/router';
+import { RouterLink } from '@angular/router';
 import { AuthService } from '../../core/services/auth.service';
 import { ProjectService } from '../../core/services/project.service';
 import { User, Project } from '../../core/models';
@@ -14,7 +14,6 @@ import { User, Project } from '../../core/models';
 export class Dashboard implements OnInit {
   private readonly authService = inject(AuthService);
   private readonly projectService = inject(ProjectService);
-  private readonly router = inject(Router);
   private readonly cdr = inject(ChangeDetectorRef);
 
   currentUser: User | null = null;
@@ -43,9 +42,5 @@ export class Dashboard implements OnInit {
         this.cdr.detectChanges();
       }
     });
-  }
-
-  logout(): void {
-    this.authService.logout();
   }
 }

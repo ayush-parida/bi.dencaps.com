@@ -1,11 +1,11 @@
 import { HttpInterceptorFn } from '@angular/common/http';
 import { inject } from '@angular/core';
-import { AuthService } from '../services/auth.service';
-import { catchError, switchMap, throwError } from 'rxjs';
+import { TokenService } from '../services/token.service';
+import { catchError, throwError } from 'rxjs';
 
 export const authInterceptor: HttpInterceptorFn = (req, next) => {
-  const authService = inject(AuthService);
-  const token = authService.getAccessToken();
+  const tokenService = inject(TokenService);
+  const token = tokenService.getAccessToken();
 
   // Clone request and add authorization header if token exists
   if (token && !req.url.includes('/auth/')) {
@@ -18,26 +18,13 @@ export const authInterceptor: HttpInterceptorFn = (req, next) => {
 
   return next(req).pipe(
     catchError(error => {
-      // If we get a 401 and we have a refresh token, try to refresh
-      if (error.status === 401 && authService.getRefreshToken()) {
-        return authService.refreshToken().pipe(
-          switchMap(() => {
-            // Retry the original request with the new token
-            const newToken = authService.getAccessToken();
-            if (newToken) {
-              req = req.clone({
-                setHeaders: {
-                  Authorization: `Bearer ${newToken}`
-                }
-              });
-            }
-            return next(req);
-          }),
-          catchError(refreshError => {
-            authService.logout();
-            return throwError(() => refreshError);
-          })
-        );
+      // Only clear tokens on 401 if this is a request that had a token attached
+      // This indicates the token is invalid/expired
+      if (error.status === 401 && token && !req.url.includes('/auth/')) {
+        console.warn('Token expired or invalid, clearing tokens');
+        tokenService.clearTokens();
+        // Don't redirect here - let the auth guard handle navigation
+        // This allows components to handle the error appropriately
       }
 
       return throwError(() => error);

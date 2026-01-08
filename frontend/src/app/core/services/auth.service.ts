@@ -4,6 +4,7 @@ import { BehaviorSubject, Observable, tap, catchError, throwError } from 'rxjs';
 import { Router } from '@angular/router';
 import { environment } from '../../../environments/environment';
 import { AuthResponse, LoginRequest, RegisterRequest, User } from '../models';
+import { TokenService } from './token.service';
 
 @Injectable({
   providedIn: 'root'
@@ -11,9 +12,7 @@ import { AuthResponse, LoginRequest, RegisterRequest, User } from '../models';
 export class AuthService {
   private readonly http = inject(HttpClient);
   private readonly router = inject(Router);
-  
-  private readonly ACCESS_TOKEN_KEY = 'access_token';
-  private readonly REFRESH_TOKEN_KEY = 'refresh_token';
+  private readonly tokenService = inject(TokenService);
   
   private currentUserSubject = new BehaviorSubject<User | null>(null);
   public currentUser$ = this.currentUserSubject.asObservable();
@@ -39,14 +38,13 @@ export class AuthService {
   }
 
   logout(): void {
-    localStorage.removeItem(this.ACCESS_TOKEN_KEY);
-    localStorage.removeItem(this.REFRESH_TOKEN_KEY);
+    this.tokenService.clearTokens();
     this.currentUserSubject.next(null);
     this.router.navigate(['/auth/login']);
   }
 
   refreshToken(): Observable<{ access_token: string }> {
-    const refreshToken = this.getRefreshToken();
+    const refreshToken = this.tokenService.getRefreshToken();
     if (!refreshToken) {
       return throwError(() => new Error('No refresh token available'));
     }
@@ -56,7 +54,7 @@ export class AuthService {
       { refresh_token: refreshToken }
     ).pipe(
       tap(response => {
-        this.setAccessToken(response.access_token);
+        this.tokenService.setAccessToken(response.access_token);
       }),
       catchError(err => {
         this.logout();
@@ -74,35 +72,32 @@ export class AuthService {
   }
 
   getAccessToken(): string | null {
-    return localStorage.getItem(this.ACCESS_TOKEN_KEY);
+    return this.tokenService.getAccessToken();
   }
 
   getRefreshToken(): string | null {
-    return localStorage.getItem(this.REFRESH_TOKEN_KEY);
+    return this.tokenService.getRefreshToken();
   }
 
   isAuthenticated(): boolean {
-    return !!this.getAccessToken();
-  }
-
-  private setAccessToken(token: string): void {
-    localStorage.setItem(this.ACCESS_TOKEN_KEY, token);
-  }
-
-  private setRefreshToken(token: string): void {
-    localStorage.setItem(this.REFRESH_TOKEN_KEY, token);
+    return this.tokenService.isAuthenticated();
   }
 
   private handleAuthResponse(response: AuthResponse): void {
-    this.setAccessToken(response.access_token);
-    this.setRefreshToken(response.refresh_token);
+    this.tokenService.setAccessToken(response.access_token);
+    this.tokenService.setRefreshToken(response.refresh_token);
     this.currentUserSubject.next(response.user);
   }
 
   private loadUserFromToken(): void {
     if (this.isAuthenticated()) {
       this.getCurrentUser().subscribe({
-        error: () => this.logout()
+        error: (err) => {
+          console.warn('Failed to load user from token:', err);
+          // Don't logout here - let the interceptor handle 401s
+          // Just clear the current user subject
+          this.currentUserSubject.next(null);
+        }
       });
     }
   }

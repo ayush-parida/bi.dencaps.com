@@ -3,7 +3,6 @@ import { CommonModule } from '@angular/common';
 import { FormBuilder, FormGroup, Validators, ReactiveFormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { ProjectService } from '../../../core/services/project.service';
-import { AuthService } from '../../../core/services/auth.service';
 import { Project } from '../../../core/models';
 
 @Component({
@@ -14,7 +13,6 @@ import { Project } from '../../../core/models';
 })
 export class ProjectList implements OnInit {
   private readonly projectService = inject(ProjectService);
-  private readonly authService = inject(AuthService);
   private readonly fb = inject(FormBuilder);
   private readonly cdr = inject(ChangeDetectorRef);
 
@@ -76,9 +74,5 @@ export class ProjectList implements OnInit {
         this.errorMessage = error.error?.error || 'Failed to create project';
       }
     });
-  }
-
-  logout(): void {
-    this.authService.logout();
   }
 }

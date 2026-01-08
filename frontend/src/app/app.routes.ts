@@ -21,24 +21,27 @@ export const routes: Routes = [
     ]
   },
   {
-    path: 'dashboard',
+    path: '',
     canActivate: [authGuard],
-    loadComponent: () => import('./features/dashboard/dashboard').then(m => m.Dashboard)
-  },
-  {
-    path: 'projects',
-    canActivate: [authGuard],
-    loadComponent: () => import('./features/projects/project-list/project-list').then(m => m.ProjectList)
-  },
-  {
-    path: 'analytics',
-    canActivate: [authGuard],
-    loadComponent: () => import('./features/analytics/query-interface/query-interface').then(m => m.QueryInterface)
-  },
-  {
-    path: 'chat',
-    canActivate: [authGuard],
-    loadComponent: () => import('./features/chat/chat-interface/chat-interface').then(m => m.ChatInterfaceComponent)
+    loadComponent: () => import('./shared/layout/layout').then(m => m.Layout),
+    children: [
+      {
+        path: 'dashboard',
+        loadComponent: () => import('./features/dashboard/dashboard').then(m => m.Dashboard)
+      },
+      {
+        path: 'projects',
+        loadComponent: () => import('./features/projects/project-list/project-list').then(m => m.ProjectList)
+      },
+      {
+        path: 'analytics',
+        loadComponent: () => import('./features/analytics/query-interface/query-interface').then(m => m.QueryInterface)
+      },
+      {
+        path: 'chat',
+        loadComponent: () => import('./features/chat/chat-interface/chat-interface').then(m => m.ChatInterfaceComponent)
+      }
+    ]
   },
   {
     path: '**',

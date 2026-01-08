@@ -1,19 +1,4 @@
 <div class="dashboard-container">
-  <nav class="navbar">
-    <div class="nav-brand">
-      <h2>DencapsBI</h2>
-    </div>
-    <div class="nav-menu">
-      <a routerLink="/dashboard" routerLinkActive="active">Dashboard</a>
-      <a routerLink="/projects" routerLinkActive="active">Projects</a>
-      <a routerLink="/analytics" routerLinkActive="active">Analytics</a>
-    </div>
-    <div class="nav-user">
-      <span *ngIf="currentUser">{{ currentUser.name }}</span>
-      <button (click)="logout()">Logout</button>
-    </div>
-  </nav>
-
   <div class="dashboard-content">
     <div class="welcome-section">
       <h1>Welcome to DencapsBI</h1>

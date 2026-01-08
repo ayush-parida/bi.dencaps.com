@@ -2,6 +2,27 @@ use serde::{Deserialize, Serialize};
 use mongodb::bson::{oid::ObjectId, DateTime};
 use validator::Validate;
 
+// Custom serialization for UUID as string in MongoDB
+mod uuid_as_string {
+    use serde::{self, Deserialize, Deserializer, Serializer};
+    use uuid::Uuid;
+
+    pub fn serialize<S>(uuid: &Uuid, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str(&uuid.to_string())
+    }
+
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<Uuid, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        Uuid::parse_str(&s).map_err(serde::de::Error::custom)
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub enum UserRole {
     Admin,
@@ -35,6 +56,7 @@ impl UserRole {
 pub struct User {
     #[serde(rename = "_id", skip_serializing_if = "Option::is_none")]
     pub id: Option<ObjectId>,
+    #[serde(with = "uuid_as_string")]
     pub user_id: uuid::Uuid,
     pub email: String,
     pub password_hash: String,
@@ -182,8 +204,11 @@ pub struct ChatMessage {
 pub struct Conversation {
     #[serde(rename = "_id", skip_serializing_if = "Option::is_none")]
     pub id: Option<ObjectId>,
+    #[serde(with = "uuid_as_string")]
     pub conversation_id: uuid::Uuid,
+    #[serde(with = "uuid_as_string")]
     pub project_id: uuid::Uuid,
+    #[serde(with = "uuid_as_string")]
     pub user_id: uuid::Uuid,
     pub title: String,
     pub messages: Vec<ChatMessage>,

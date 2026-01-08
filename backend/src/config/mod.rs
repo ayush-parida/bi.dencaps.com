@@ -45,7 +45,7 @@ impl Config {
         let jwt_secret = env::var("JWT_SECRET")
             .map_err(|_| "JWT_SECRET must be set")?;
         let jwt_expiration = env::var("JWT_EXPIRATION")
-            .unwrap_or_else(|_| "3600".to_string())
+            .unwrap_or_else(|_| "86400".to_string())
             .parse::<i64>()
             .map_err(|_| "Invalid JWT_EXPIRATION")?;
         let jwt_refresh_expiration = env::var("JWT_REFRESH_EXPIRATION")
