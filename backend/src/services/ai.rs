@@ -26,6 +26,7 @@ struct Choice {
     message: Message,
 }
 
+#[derive(Clone)]
 pub struct AIService {
     client: Client,
     api_url: String,
@@ -128,5 +129,66 @@ impl AIService {
         );
 
         self.process_analytics_query(&query, None).await
+    }
+
+    pub async fn process_chat_message(
+        &self,
+        message: &str,
+        context: Option<&str>,
+    ) -> Result<String, String> {
+        let system_message = "You are DencapsBI Chat Assistant, an advanced AI analytics assistant. \
+            You help users with data analysis, business intelligence questions, and provide insights. \
+            You can discuss data visualization, analytics strategies, SQL queries, and statistical methods. \
+            Provide clear, structured, and actionable responses. When providing structured data like lists, \
+            tables, or code snippets, use markdown formatting.";
+
+        let mut messages = vec![Message {
+            role: "system".to_string(),
+            content: system_message.to_string(),
+        }];
+
+        if let Some(ctx) = context {
+            messages.push(Message {
+                role: "system".to_string(),
+                content: format!("Previous conversation:\n{}", ctx),
+            });
+        }
+
+        messages.push(Message {
+            role: "user".to_string(),
+            content: message.to_string(),
+        });
+
+        let request = LMStudioRequest {
+            model: self.model_name.clone(),
+            messages,
+            temperature: 0.7,
+            max_tokens: 2000,
+        };
+
+        let response = self
+            .client
+            .post(&format!("{}/v1/chat/completions", self.api_url))
+            .json(&request)
+            .send()
+            .await
+            .map_err(|e| format!("Failed to send request to LM Studio: {}", e))?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
+            return Err(format!("LM Studio API error ({}): {}", status, error_text));
+        }
+
+        let ai_response: LMStudioResponse = response
+            .json()
+            .await
+            .map_err(|e| format!("Failed to parse LM Studio response: {}", e))?;
+
+        ai_response
+            .choices
+            .first()
+            .map(|choice| choice.message.content.clone())
+            .ok_or_else(|| "No response from AI model".to_string())
     }
 }

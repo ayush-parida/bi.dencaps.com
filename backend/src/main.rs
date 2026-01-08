@@ -52,7 +52,14 @@ async fn main() -> std::io::Result<()> {
     let project_service = web::Data::new(services::ProjectService::new(db_manager.clone()));
     let analytics_service = web::Data::new(services::AnalyticsService::new(
         db_manager.clone(),
+        ai_service.clone(),
+    ));
+    let chat_service = web::Data::new(services::ChatService::new(
+        db_manager.clone(),
         ai_service,
+        config.chat_rate_limit_messages,
+        config.chat_rate_limit_window_secs,
+        config.chat_context_message_limit,
     ));
 
     let jwt_manager_data = web::Data::new(jwt_manager.clone());
@@ -87,6 +94,7 @@ async fn main() -> std::io::Result<()> {
             .app_data(user_service.clone())
             .app_data(project_service.clone())
             .app_data(analytics_service.clone())
+            .app_data(chat_service.clone())
             .app_data(jwt_manager_data.clone())
             // Public routes
             .service(
@@ -120,6 +128,12 @@ async fn main() -> std::io::Result<()> {
                             .route("/queries/{query_id}", web::get().to(handlers::analytics::get_query_by_id))
                             .route("/queries/{query_id}/process", web::post().to(handlers::analytics::process_query))
                             .route("/projects/{project_id}/queries", web::get().to(handlers::analytics::get_project_queries))
+                    )
+                    .service(
+                        web::scope("/chat")
+                            .route("/message", web::post().to(handlers::chat::send_message))
+                            .route("/conversations/{conversation_id}", web::get().to(handlers::chat::get_conversation))
+                            .route("/projects/{project_id}/conversations", web::get().to(handlers::chat::get_project_conversations))
                     )
             )
     })

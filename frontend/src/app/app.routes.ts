@@ -36,6 +36,11 @@ export const routes: Routes = [
     loadComponent: () => import('./features/analytics/query-interface/query-interface').then(m => m.QueryInterface)
   },
   {
+    path: 'chat',
+    canActivate: [authGuard],
+    loadComponent: () => import('./features/chat/chat-interface/chat-interface').then(m => m.ChatInterfaceComponent)
+  },
+  {
     path: '**',
     redirectTo: 'dashboard'
   }

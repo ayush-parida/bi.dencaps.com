@@ -1,7 +1,7 @@
 use mongodb::{Client, Database, Collection};
 use redis::aio::ConnectionManager;
 use std::sync::Arc;
-use crate::models::{User, Project, AnalyticsQuery};
+use crate::models::{User, Project, AnalyticsQuery, Conversation};
 use crate::config::Config;
 
 #[derive(Clone)]
@@ -52,6 +52,10 @@ impl DatabaseManager {
         self.db.collection("analytics_queries")
     }
 
+    pub fn conversations_collection(&self) -> Collection<Conversation> {
+        self.db.collection("conversations")
+    }
+
     pub async fn create_indexes(&self) -> Result<(), String> {
         use mongodb::IndexModel;
         use mongodb::bson::doc;
@@ -100,6 +104,27 @@ impl DatabaseManager {
             .create_indexes(vec![query_project_index, query_user_index])
             .await
             .map_err(|e| format!("Failed to create query indexes: {}", e))?;
+
+        // Conversation indexes
+        let conversation_project_index = IndexModel::builder()
+            .keys(doc! { "project_id": 1 })
+            .build();
+
+        let conversation_user_index = IndexModel::builder()
+            .keys(doc! { "user_id": 1 })
+            .build();
+
+        let conversation_id_index = IndexModel::builder()
+            .keys(doc! { "conversation_id": 1 })
+            .options(mongodb::options::IndexOptions::builder()
+                .unique(true)
+                .build())
+            .build();
+
+        self.conversations_collection()
+            .create_indexes(vec![conversation_project_index, conversation_user_index, conversation_id_index])
+            .await
+            .map_err(|e| format!("Failed to create conversation indexes: {}", e))?;
 
         log::info!("Database indexes created successfully");
         Ok(())

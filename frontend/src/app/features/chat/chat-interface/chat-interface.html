@@ -1,0 +1,150 @@
+<div class="chat-container">
+  <!-- Sidebar with conversations -->
+  <aside class="conversations-sidebar">
+    <div class="sidebar-header">
+      <h2>Conversations</h2>
+      <button 
+        class="new-conversation-btn" 
+        (click)="startNewConversation()"
+        [disabled]="isSending()">
+        + New Chat
+      </button>
+    </div>
+
+    <div class="conversations-list">
+      @if (isLoading()) {
+        <div class="loading-state">Loading conversations...</div>
+      } @else if (conversations().length === 0) {
+        <div class="empty-state">
+          <p>No conversations yet.</p>
+          <p class="empty-hint">Start a new conversation to begin.</p>
+        </div>
+      } @else {
+        @for (conversation of conversations(); track conversation.conversation_id) {
+          <div 
+            class="conversation-item"
+            [class.active]="currentConversationId() === conversation.conversation_id"
+            (click)="loadConversation(conversation.conversation_id)">
+            <div class="conversation-title">{{ conversation.title }}</div>
+            <div class="conversation-meta">
+              {{ formatTimestamp(conversation.updated_at) }}
+            </div>
+          </div>
+        }
+      }
+    </div>
+
+    @if (project()) {
+      <div class="sidebar-footer">
+        <div class="project-info">
+          <span class="project-label">Project:</span>
+          <span class="project-name">{{ project()!.name }}</span>
+        </div>
+      </div>
+    }
+  </aside>
+
+  <!-- Main chat area -->
+  <main class="chat-main">
+    <div class="chat-header">
+      <h1>DencapsBI Chat Assistant</h1>
+      @if (currentConversationId()) {
+        <span class="conversation-badge">Active Conversation</span>
+      } @else {
+        <span class="conversation-badge new">New Conversation</span>
+      }
+    </div>
+
+    <!-- Messages area -->
+    <div class="messages-container">
+      @if (messages().length === 0) {
+        <div class="welcome-message">
+          <h2>Welcome to DencapsBI Chat</h2>
+          <p>Ask me anything about data analysis, business intelligence, or your project data.</p>
+          <div class="suggestions">
+            <p>Try asking:</p>
+            <ul>
+              <li>"How do I analyze sales trends?"</li>
+              <li>"What visualization should I use for time-series data?"</li>
+              <li>"Explain SQL JOIN operations"</li>
+            </ul>
+          </div>
+        </div>
+      } @else {
+        <div class="messages-list">
+          @for (message of messages(); track trackByIndex($index)) {
+            <div class="message" [class]="'message-' + message.role">
+              <div class="message-avatar">
+                @if (message.role === 'user') {
+                  <span class="avatar-icon">👤</span>
+                } @else {
+                  <span class="avatar-icon">🤖</span>
+                }
+              </div>
+              <div class="message-content">
+                <div class="message-header">
+                  <span class="message-role">{{ message.role === 'user' ? 'You' : 'AI Assistant' }}</span>
+                  <span class="message-time">{{ formatTimestamp(message.timestamp) }}</span>
+                </div>
+                <div class="message-text">{{ message.content }}</div>
+              </div>
+            </div>
+          }
+          
+          @if (isSending()) {
+            <div class="message message-assistant">
+              <div class="message-avatar">
+                <span class="avatar-icon">🤖</span>
+              </div>
+              <div class="message-content">
+                <div class="message-header">
+                  <span class="message-role">AI Assistant</span>
+                </div>
+                <div class="message-text typing-indicator">
+                  <span></span>
+                  <span></span>
+                  <span></span>
+                </div>
+              </div>
+            </div>
+          }
+        </div>
+      }
+    </div>
+
+    <!-- Error display -->
+    @if (error()) {
+      <div class="error-banner">
+        <span class="error-icon">⚠️</span>
+        <span class="error-text">{{ error() }}</span>
+        <button class="error-close" (click)="error.set(null)">✕</button>
+      </div>
+    }
+
+    <!-- Input area -->
+    <div class="input-area">
+      <div class="input-container">
+        <textarea
+          class="message-input"
+          [(ngModel)]="messageInput"
+          (keypress)="onKeyPress($event)"
+          [disabled]="isSending() || !projectId()"
+          placeholder="Type your message... (Press Enter to send, Shift+Enter for new line)"
+          rows="3"></textarea>
+        <button 
+          class="send-button"
+          (click)="sendMessage()"
+          [disabled]="!messageInput.trim() || isSending() || !projectId()">
+          @if (isSending()) {
+            <span class="button-spinner"></span>
+          } @else {
+            <span>Send ➤</span>
+          }
+        </button>
+      </div>
+      <div class="input-hint">
+        Structured responses are returned as-is. Rendering is handled by separate modules.
+      </div>
+    </div>
+  </main>
+</div>
