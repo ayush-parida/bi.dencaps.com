@@ -86,7 +86,18 @@
                   <span class="message-role">{{ message.role === 'user' ? 'You' : 'AI Assistant' }}</span>
                   <span class="message-time">{{ formatTimestamp(message.timestamp) }}</span>
                 </div>
-                <div class="message-text">{{ message.content }}</div>
+                
+                <!-- Check if message has structured content -->
+                @if (isStructuredContent(message)) {
+                  <app-content-renderer [response]="message.structured_content"></app-content-renderer>
+                } @else {
+                  <!-- Try to parse content as JSON for structured response -->
+                  @if (tryParseStructuredContent(message.content); as structuredData) {
+                    <app-content-renderer [response]="structuredData"></app-content-renderer>
+                  } @else {
+                    <div class="message-text">{{ message.content }}</div>
+                  }
+                }
               </div>
             </div>
           }

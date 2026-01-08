@@ -58,7 +58,11 @@
     <div *ngIf="currentResponse" class="response-section">
       <h2>AI Response</h2>
       <div class="response-card">
-        <pre>{{ currentResponse }}</pre>
+        @if (tryParseStructuredResponse(currentResponse); as structuredData) {
+          <app-content-renderer [response]="structuredData"></app-content-renderer>
+        } @else {
+          <pre>{{ currentResponse }}</pre>
+        }
       </div>
     </div>
 
@@ -82,7 +86,11 @@
           </div>
           <div *ngIf="query.response_text" class="query-response">
             <strong>Response:</strong>
-            <pre>{{ query.response_text }}</pre>
+            @if (tryParseStructuredResponse(query.response_text); as structuredData) {
+              <app-content-renderer [response]="structuredData"></app-content-renderer>
+            } @else {
+              <pre>{{ query.response_text }}</pre>
+            }
           </div>
         </div>
       </div>

@@ -79,12 +79,14 @@ export interface ChatMessage {
   role: 'user' | 'assistant';
   content: string;
   timestamp: string;
+  structured_content?: any; // Optional structured rendering data
 }
 
 export interface SendMessageRequest {
   message: string;
   project_id: string;
   conversation_id?: string;
+  use_structured_response?: boolean; // Request structured response
 }
 
 export interface ChatResponse {
