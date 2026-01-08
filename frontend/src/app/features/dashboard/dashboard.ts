@@ -1,4 +1,4 @@
-import { Component, inject, OnInit } from '@angular/core';
+import { Component, inject, OnInit, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Router, RouterLink } from '@angular/router';
 import { AuthService } from '../../core/services/auth.service';
@@ -15,6 +15,7 @@ export class Dashboard implements OnInit {
   private readonly authService = inject(AuthService);
   private readonly projectService = inject(ProjectService);
   private readonly router = inject(Router);
+  private readonly cdr = inject(ChangeDetectorRef);
 
   currentUser: User | null = null;
   projects: Project[] = [];
@@ -23,6 +24,7 @@ export class Dashboard implements OnInit {
   ngOnInit(): void {
     this.authService.currentUser$.subscribe(user => {
       this.currentUser = user;
+      this.cdr.detectChanges();
     });
 
     this.loadProjects();
@@ -33,10 +35,12 @@ export class Dashboard implements OnInit {
       next: (projects) => {
         this.projects = projects;
         this.isLoading = false;
+        this.cdr.detectChanges();
       },
       error: (error) => {
         console.error('Failed to load projects:', error);
         this.isLoading = false;
+        this.cdr.detectChanges();
       }
     });
   }

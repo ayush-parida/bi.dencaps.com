@@ -68,11 +68,11 @@ pub struct LoginDto {
 pub struct Project {
     #[serde(rename = "_id", skip_serializing_if = "Option::is_none")]
     pub id: Option<ObjectId>,
-    pub project_id: uuid::Uuid,
+    pub project_id: String,
     pub name: String,
     pub description: String,
     pub tenant_id: String,
-    pub owner_id: uuid::Uuid,
+    pub owner_id: String,
     pub member_ids: Vec<String>,
     pub is_active: bool,
     pub created_at: DateTime,
@@ -90,9 +90,9 @@ pub struct CreateProjectDto {
 pub struct AnalyticsQuery {
     #[serde(rename = "_id", skip_serializing_if = "Option::is_none")]
     pub id: Option<ObjectId>,
-    pub query_id: uuid::Uuid,
-    pub project_id: uuid::Uuid,
-    pub user_id: uuid::Uuid,
+    pub query_id: String,
+    pub project_id: String,
+    pub user_id: String,
     pub query_text: String,
     pub response_text: Option<String>,
     pub status: QueryStatus,

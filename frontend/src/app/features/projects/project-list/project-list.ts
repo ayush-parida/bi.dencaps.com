@@ -1,4 +1,4 @@
-import { Component, inject, OnInit } from '@angular/core';
+import { Component, inject, OnInit, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormBuilder, FormGroup, Validators, ReactiveFormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
@@ -16,6 +16,7 @@ export class ProjectList implements OnInit {
   private readonly projectService = inject(ProjectService);
   private readonly authService = inject(AuthService);
   private readonly fb = inject(FormBuilder);
+  private readonly cdr = inject(ChangeDetectorRef);
 
   projects: Project[] = [];
   isLoading: boolean = true;
@@ -36,14 +37,18 @@ export class ProjectList implements OnInit {
 
   loadProjects(): void {
     this.isLoading = true;
+    console.log('Loading projects...');
     this.projectService.getProjects().subscribe({
       next: (projects) => {
+        console.log('Projects loaded:', projects);
         this.projects = projects;
         this.isLoading = false;
+        this.cdr.detectChanges();
       },
       error: (error) => {
         console.error('Failed to load projects:', error);
         this.isLoading = false;
+        this.cdr.detectChanges();
       }
     });
   }

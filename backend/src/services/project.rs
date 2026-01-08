@@ -22,11 +22,11 @@ impl ProjectService {
 
         let project = Project {
             id: None,
-            project_id: Uuid::new_v4(),
+            project_id: Uuid::new_v4().to_string(),
             name: dto.name,
             description: dto.description,
             tenant_id: tenant_id.to_string(),
-            owner_id: *owner_id,
+            owner_id: owner_id.to_string(),
             member_ids: vec![],
             is_active: true,
             created_at: now,
@@ -47,7 +47,7 @@ impl ProjectService {
         
         self.db
             .projects_collection()
-            .find_one(doc! { "project_id": uuid_str })
+            .find_one(doc! { "project_id": &uuid_str })
             .await
             .map_err(|e| format!("Database error: {}", e))?
             .ok_or_else(|| "Project not found".to_string())
@@ -79,14 +79,17 @@ impl ProjectService {
         
         let uuid_str = user_id.to_string();
 
+        // Log for debugging
+        log::info!("Querying projects for user_id: {}, tenant_id: {}", uuid_str, tenant_id);
+
         let cursor = self.db
             .projects_collection()
             .find(
                 doc! {
                     "tenant_id": tenant_id,
                     "$or": [
-                        { "owner_id": &uuid_str },
-                        { "member_ids": &uuid_str }
+                        { "owner_id": uuid_str.clone() },
+                        { "member_ids": uuid_str.clone() }
                     ]
                 }
             )
@@ -103,8 +106,9 @@ impl ProjectService {
 
     pub async fn check_user_access(&self, project_id: &Uuid, user_id: &Uuid) -> Result<bool, String> {
         let project = self.get_project_by_id(project_id).await?;
+        let user_id_str = user_id.to_string();
         
-        Ok(project.owner_id == *user_id || 
-           project.member_ids.contains(&user_id.to_string()))
+        Ok(project.owner_id == user_id_str || 
+           project.member_ids.contains(&user_id_str))
     }
 }

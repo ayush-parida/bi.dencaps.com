@@ -19,16 +19,17 @@ impl AnalyticsService {
         dto: CreateQueryDto,
         user_id: &Uuid,
     ) -> Result<AnalyticsQuery, String> {
-        let project_id = Uuid::parse_str(&dto.project_id)
+        // Validate project ID format
+        Uuid::parse_str(&dto.project_id)
             .map_err(|_| "Invalid project ID format".to_string())?;
 
         let now = DateTime::now();
 
         let query = AnalyticsQuery {
             id: None,
-            query_id: Uuid::new_v4(),
-            project_id,
-            user_id: *user_id,
+            query_id: Uuid::new_v4().to_string(),
+            project_id: dto.project_id,
+            user_id: user_id.to_string(),
             query_text: dto.query_text,
             response_text: None,
             status: QueryStatus::Pending,

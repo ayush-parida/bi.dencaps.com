@@ -144,8 +144,18 @@ pub async fn get_query_by_id(
         }
     };
 
+    // Parse project_id from query
+    let project_uuid = match uuid::Uuid::parse_str(&query.project_id) {
+        Ok(id) => id,
+        Err(_) => {
+            return HttpResponse::BadRequest().json(ErrorResponse {
+                error: "Invalid project ID in query".to_string(),
+            });
+        }
+    };
+
     // Check project access
-    match project_service.check_user_access(&query.project_id, &user_id).await {
+    match project_service.check_user_access(&project_uuid, &user_id).await {
         Ok(has_access) => {
             if !has_access {
                 return HttpResponse::Forbidden().json(ErrorResponse {

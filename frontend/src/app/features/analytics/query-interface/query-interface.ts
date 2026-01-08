@@ -1,4 +1,4 @@
-import { Component, inject, OnInit } from '@angular/core';
+import { Component, inject, OnInit, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormBuilder, FormGroup, Validators, ReactiveFormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
@@ -18,6 +18,7 @@ export class QueryInterface implements OnInit {
   private readonly projectService = inject(ProjectService);
   private readonly authService = inject(AuthService);
   private readonly fb = inject(FormBuilder);
+  private readonly cdr = inject(ChangeDetectorRef);
 
   projects: Project[] = [];
   queries: AnalyticsQuery[] = [];
@@ -45,9 +46,11 @@ export class QueryInterface implements OnInit {
           this.queryForm.patchValue({ project_id: projects[0].project_id });
           this.loadQueries(projects[0].project_id);
         }
+        this.cdr.detectChanges();
       },
       error: (error) => {
         console.error('Failed to load projects:', error);
+        this.cdr.detectChanges();
       }
     });
   }
@@ -63,9 +66,11 @@ export class QueryInterface implements OnInit {
     this.analyticsService.getProjectQueries(projectId).subscribe({
       next: (queries) => {
         this.queries = queries;
+        this.cdr.detectChanges();
       },
       error: (error) => {
         console.error('Failed to load queries:', error);
+        this.cdr.detectChanges();
       }
     });
   }
@@ -87,6 +92,7 @@ export class QueryInterface implements OnInit {
       error: (error) => {
         this.isProcessing = false;
         this.errorMessage = error.error?.error || 'Failed to create query';
+        this.cdr.detectChanges();
       }
     });
   }
@@ -98,10 +104,12 @@ export class QueryInterface implements OnInit {
         this.isProcessing = false;
         this.queryForm.patchValue({ query_text: '' });
         this.loadQueries(this.queryForm.value.project_id);
+        this.cdr.detectChanges();
       },
       error: (error) => {
         this.isProcessing = false;
         this.errorMessage = error.error?.error || 'Failed to process query';
+        this.cdr.detectChanges();
       }
     });
   }
