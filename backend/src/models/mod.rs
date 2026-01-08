@@ -169,3 +169,80 @@ pub struct AuthResponse {
     pub refresh_token: String,
     pub user: UserResponse,
 }
+
+// Chat Models
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct ChatMessage {
+    pub role: String, // "user" or "assistant"
+    pub content: String,
+    pub timestamp: DateTime,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct Conversation {
+    #[serde(rename = "_id", skip_serializing_if = "Option::is_none")]
+    pub id: Option<ObjectId>,
+    pub conversation_id: uuid::Uuid,
+    pub project_id: uuid::Uuid,
+    pub user_id: uuid::Uuid,
+    pub title: String,
+    pub messages: Vec<ChatMessage>,
+    pub created_at: DateTime,
+    pub updated_at: DateTime,
+}
+
+#[derive(Debug, Deserialize, Validate)]
+pub struct SendMessageDto {
+    #[validate(length(min = 1))]
+    pub message: String,
+    pub project_id: String,
+    pub conversation_id: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ChatResponse {
+    pub conversation_id: String,
+    pub message: ChatMessageResponse,
+}
+
+#[derive(Debug, Serialize, Clone)]
+pub struct ChatMessageResponse {
+    pub role: String,
+    pub content: String,
+    pub timestamp: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ConversationResponse {
+    pub conversation_id: String,
+    pub project_id: String,
+    pub user_id: String,
+    pub title: String,
+    pub messages: Vec<ChatMessageResponse>,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+impl From<ChatMessage> for ChatMessageResponse {
+    fn from(msg: ChatMessage) -> Self {
+        ChatMessageResponse {
+            role: msg.role,
+            content: msg.content,
+            timestamp: msg.timestamp.to_string(),
+        }
+    }
+}
+
+impl From<Conversation> for ConversationResponse {
+    fn from(conv: Conversation) -> Self {
+        ConversationResponse {
+            conversation_id: conv.conversation_id.to_string(),
+            project_id: conv.project_id.to_string(),
+            user_id: conv.user_id.to_string(),
+            title: conv.title,
+            messages: conv.messages.into_iter().map(|m| m.into()).collect(),
+            created_at: conv.created_at.to_string(),
+            updated_at: conv.updated_at.to_string(),
+        }
+    }
+}

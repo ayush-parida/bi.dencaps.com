@@ -73,3 +73,32 @@ export interface CreateQueryRequest {
 export interface ApiError {
   error: string;
 }
+
+// Chat Models
+export interface ChatMessage {
+  role: 'user' | 'assistant';
+  content: string;
+  timestamp: string;
+}
+
+export interface SendMessageRequest {
+  message: string;
+  project_id: string;
+  conversation_id?: string;
+}
+
+export interface ChatResponse {
+  conversation_id: string;
+  message: ChatMessage;
+}
+
+export interface Conversation {
+  conversation_id: string;
+  project_id: string;
+  user_id: string;
+  title: string;
+  messages: ChatMessage[];
+  created_at: string;
+  updated_at: string;
+}
+
