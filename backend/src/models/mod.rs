@@ -246,3 +246,123 @@ impl From<Conversation> for ConversationResponse {
         }
     }
 }
+
+// Rendering Module Models
+
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[serde(tag = "type", rename_all = "lowercase")]
+pub enum RenderContent {
+    Text { content: String },
+    Chart { data: ChartData },
+    Equation { latex: String, display: Option<bool> },
+    Table { data: TableData },
+    Dataset { data: DatasetData },
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+pub struct ChartData {
+    pub chart_type: ChartType,
+    pub title: Option<String>,
+    pub labels: Vec<String>,
+    pub datasets: Vec<ChartDataset>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[serde(rename_all = "lowercase")]
+pub enum ChartType {
+    Bar,
+    Line,
+    Pie,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+pub struct ChartDataset {
+    pub label: String,
+    pub data: Vec<f64>,
+    pub background_color: Option<String>,
+    pub border_color: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+pub struct TableData {
+    pub headers: Vec<String>,
+    pub rows: Vec<Vec<String>>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+pub struct DatasetData {
+    pub name: String,
+    pub description: Option<String>,
+    pub columns: Vec<ColumnInfo>,
+    pub rows: Vec<Vec<serde_json::Value>>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+pub struct ColumnInfo {
+    pub name: String,
+    pub data_type: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, Validate)]
+pub struct StructuredResponse {
+    pub items: Vec<RenderContent>,
+}
+
+impl StructuredResponse {
+    /// Validates the structured response content
+    pub fn validate_content(&self) -> Result<(), String> {
+        if self.items.is_empty() {
+            return Err("Response must contain at least one item".to_string());
+        }
+
+        for item in &self.items {
+            match item {
+                RenderContent::Text { content } => {
+                    if content.is_empty() {
+                        return Err("Text content cannot be empty".to_string());
+                    }
+                }
+                RenderContent::Chart { data } => {
+                    if data.labels.is_empty() {
+                        return Err("Chart must have at least one label".to_string());
+                    }
+                    if data.datasets.is_empty() {
+                        return Err("Chart must have at least one dataset".to_string());
+                    }
+                    for dataset in &data.datasets {
+                        if dataset.data.len() != data.labels.len() {
+                            return Err("Dataset length must match labels length".to_string());
+                        }
+                    }
+                }
+                RenderContent::Equation { latex, .. } => {
+                    if latex.is_empty() {
+                        return Err("Equation latex cannot be empty".to_string());
+                    }
+                }
+                RenderContent::Table { data } => {
+                    if data.headers.is_empty() {
+                        return Err("Table must have at least one header".to_string());
+                    }
+                    for row in &data.rows {
+                        if row.len() != data.headers.len() {
+                            return Err("All table rows must match header length".to_string());
+                        }
+                    }
+                }
+                RenderContent::Dataset { data } => {
+                    if data.columns.is_empty() {
+                        return Err("Dataset must have at least one column".to_string());
+                    }
+                    for row in &data.rows {
+                        if row.len() != data.columns.len() {
+                            return Err("All dataset rows must match column length".to_string());
+                        }
+                    }
+                }
+            }
+        }
+
+        Ok(())
+    }
+}
