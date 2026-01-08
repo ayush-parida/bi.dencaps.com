@@ -14,6 +14,9 @@ pub struct Config {
     pub lm_studio_model_name: String,
     pub rate_limit_requests: usize,
     pub rate_limit_window_secs: u64,
+    pub chat_rate_limit_messages: usize,
+    pub chat_rate_limit_window_secs: u64,
+    pub chat_context_message_limit: usize,
     pub cors_allowed_origins: Vec<String>,
 }
 
@@ -64,6 +67,19 @@ impl Config {
             .parse::<u64>()
             .map_err(|_| "Invalid RATE_LIMIT_WINDOW_SECS")?;
 
+        let chat_rate_limit_messages = env::var("CHAT_RATE_LIMIT_MESSAGES")
+            .unwrap_or_else(|_| "20".to_string())
+            .parse::<usize>()
+            .map_err(|_| "Invalid CHAT_RATE_LIMIT_MESSAGES")?;
+        let chat_rate_limit_window_secs = env::var("CHAT_RATE_LIMIT_WINDOW_SECS")
+            .unwrap_or_else(|_| "60".to_string())
+            .parse::<u64>()
+            .map_err(|_| "Invalid CHAT_RATE_LIMIT_WINDOW_SECS")?;
+        let chat_context_message_limit = env::var("CHAT_CONTEXT_MESSAGE_LIMIT")
+            .unwrap_or_else(|_| "10".to_string())
+            .parse::<usize>()
+            .map_err(|_| "Invalid CHAT_CONTEXT_MESSAGE_LIMIT")?;
+
         let cors_allowed_origins = env::var("CORS_ALLOWED_ORIGINS")
             .unwrap_or_else(|_| "http://localhost:4200".to_string())
             .split(',')
@@ -83,6 +99,9 @@ impl Config {
             lm_studio_model_name,
             rate_limit_requests,
             rate_limit_window_secs,
+            chat_rate_limit_messages,
+            chat_rate_limit_window_secs,
+            chat_context_message_limit,
             cors_allowed_origins,
         })
     }

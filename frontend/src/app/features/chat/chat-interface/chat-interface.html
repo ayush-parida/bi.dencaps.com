@@ -134,7 +134,7 @@
         <button 
           class="send-button"
           (click)="sendMessage()"
-          [disabled]="!messageInput().trim() || isSending() || !projectId()">
+          [disabled]="!messageInput.trim() || isSending() || !projectId()">
           @if (isSending()) {
             <span class="button-spinner"></span>
           } @else {

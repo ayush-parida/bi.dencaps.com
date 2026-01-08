@@ -25,7 +25,7 @@ export class ChatInterfaceComponent implements OnInit, OnDestroy {
   currentConversationId = signal<string | null>(null);
   conversations = signal<Conversation[]>([]);
   messages = signal<ChatMessage[]>([]);
-  messageInput = signal<string>('');
+  messageInput = ''; // Regular property for ngModel
   isLoading = signal<boolean>(false);
   isSending = signal<boolean>(false);
   error = signal<string | null>(null);
@@ -117,7 +117,7 @@ export class ChatInterfaceComponent implements OnInit, OnDestroy {
   }
 
   sendMessage(): void {
-    const message = this.messageInput().trim();
+    const message = this.messageInput.trim();
     const pid = this.projectId();
     
     if (!message || !pid) {
@@ -134,7 +134,7 @@ export class ChatInterfaceComponent implements OnInit, OnDestroy {
       timestamp: new Date().toISOString()
     };
     this.messages.update(msgs => [...msgs, userMessage]);
-    this.messageInput.set('');
+    this.messageInput = '';
 
     this.chatService.sendMessage({
       message,
@@ -144,21 +144,31 @@ export class ChatInterfaceComponent implements OnInit, OnDestroy {
       .subscribe({
         next: (response) => {
           // Update conversation ID if it's a new conversation
-          if (!this.currentConversationId()) {
+          const isNewConversation = !this.currentConversationId();
+          if (isNewConversation) {
             this.currentConversationId.set(response.conversation_id);
+            
+            // Add the new conversation to the list without full reload
+            const newConv: Conversation = {
+              conversation_id: response.conversation_id,
+              project_id: pid,
+              user_id: '', // Will be filled by backend
+              title: message.length > 50 ? message.substring(0, 47) + '...' : message,
+              messages: [...this.messages(), response.message],
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString()
+            };
+            this.conversations.update(convs => [newConv, ...convs]);
           }
 
           // Add AI response to messages
           this.messages.update(msgs => [...msgs, response.message]);
           this.isSending.set(false);
-
-          // Reload conversations list
-          this.loadConversations(pid);
         },
         error: (err) => {
           // Remove the optimistically added user message on error
           this.messages.update(msgs => msgs.slice(0, -1));
-          this.messageInput.set(message); // Restore the message
+          this.messageInput = message; // Restore the message
           this.error.set(err.message);
           this.isSending.set(false);
         }

@@ -299,9 +299,89 @@ All endpoints may return error responses in the following format:
 }
 ```
 
+## Chat Endpoints
+
+### Send Message
+**POST** `/api/chat/message`
+
+Sends a message in a conversation and gets AI response.
+
+**Request Body:**
+```json
+{
+  "message": "How can I analyze customer churn?",
+  "project_id": "660e8400-e29b-41d4-a716-446655440000",
+  "conversation_id": "880e8400-e29b-41d4-a716-446655440000"
+}
+```
+
+Note: `conversation_id` is optional. If omitted, a new conversation is created.
+
+**Response:** (200 OK)
+```json
+{
+  "conversation_id": "880e8400-e29b-41d4-a716-446655440000",
+  "message": {
+    "role": "assistant",
+    "content": "To analyze customer churn, you should...",
+    "timestamp": "2024-01-07T19:10:00Z"
+  }
+}
+```
+
+### Get Conversation
+**GET** `/api/chat/conversations/{conversation_id}`
+
+Returns a specific conversation with all messages.
+
+**Response:** (200 OK)
+```json
+{
+  "conversation_id": "880e8400-e29b-41d4-a716-446655440000",
+  "project_id": "660e8400-e29b-41d4-a716-446655440000",
+  "user_id": "550e8400-e29b-41d4-a716-446655440000",
+  "title": "How can I analyze customer churn?",
+  "messages": [
+    {
+      "role": "user",
+      "content": "How can I analyze customer churn?",
+      "timestamp": "2024-01-07T19:10:00Z"
+    },
+    {
+      "role": "assistant",
+      "content": "To analyze customer churn, you should...",
+      "timestamp": "2024-01-07T19:10:05Z"
+    }
+  ],
+  "created_at": "2024-01-07T19:10:00Z",
+  "updated_at": "2024-01-07T19:10:05Z"
+}
+```
+
+### Get Project Conversations
+**GET** `/api/chat/projects/{project_id}/conversations`
+
+Returns all conversations for a specific project.
+
+**Response:** (200 OK)
+```json
+[
+  {
+    "conversation_id": "880e8400-e29b-41d4-a716-446655440000",
+    "project_id": "660e8400-e29b-41d4-a716-446655440000",
+    "user_id": "550e8400-e29b-41d4-a716-446655440000",
+    "title": "How can I analyze customer churn?",
+    "messages": [...],
+    "created_at": "2024-01-07T19:10:00Z",
+    "updated_at": "2024-01-07T19:10:05Z"
+  }
+]
+```
+
 ## Rate Limiting
 
 - Default: 100 requests per 60 seconds per IP address
+- Chat endpoints: Additional rate limit of 20 messages per 60 seconds per user
 - Configurable via `RATE_LIMIT_REQUESTS` and `RATE_LIMIT_WINDOW_SECS` environment variables
 - Applies to all protected endpoints
 

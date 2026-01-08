@@ -57,6 +57,9 @@ async fn main() -> std::io::Result<()> {
     let chat_service = web::Data::new(services::ChatService::new(
         db_manager.clone(),
         ai_service,
+        config.chat_rate_limit_messages,
+        config.chat_rate_limit_window_secs,
+        config.chat_context_message_limit,
     ));
 
     let jwt_manager_data = web::Data::new(jwt_manager.clone());

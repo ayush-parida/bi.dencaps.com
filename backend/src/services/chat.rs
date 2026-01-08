@@ -9,13 +9,25 @@ use uuid::Uuid;
 pub struct ChatService {
     db_manager: DatabaseManager,
     ai_service: AIService,
+    chat_rate_limit_messages: usize,
+    chat_rate_limit_window_secs: u64,
+    chat_context_message_limit: usize,
 }
 
 impl ChatService {
-    pub fn new(db_manager: DatabaseManager, ai_service: AIService) -> Self {
+    pub fn new(
+        db_manager: DatabaseManager,
+        ai_service: AIService,
+        chat_rate_limit_messages: usize,
+        chat_rate_limit_window_secs: u64,
+        chat_context_message_limit: usize,
+    ) -> Self {
         ChatService {
             db_manager,
             ai_service,
+            chat_rate_limit_messages,
+            chat_rate_limit_window_secs,
+            chat_context_message_limit,
         }
     }
 
@@ -216,12 +228,12 @@ impl ChatService {
             return None;
         }
 
-        // Take last 10 messages for context (exclude the latest user message)
+        // Take last N messages for context (exclude the latest user message)
         let context_messages: Vec<String> = messages
             .iter()
             .rev()
             .skip(1)
-            .take(10)
+            .take(self.chat_context_message_limit)
             .rev()
             .map(|m| format!("{}: {}", m.role, m.content))
             .collect();
@@ -245,8 +257,8 @@ impl ChatService {
 
         let current = count.unwrap_or(0);
 
-        // Rate limit: 20 messages per minute
-        if current >= 20 {
+        // Check rate limit
+        if current >= self.chat_rate_limit_messages as i32 {
             return Ok(false);
         }
 
@@ -259,7 +271,7 @@ impl ChatService {
         // Set expiry if this is the first request
         if count.is_none() {
             let _: () = redis
-                .expire(&key, 60)
+                .expire(&key, self.chat_rate_limit_window_secs as i64)
                 .await
                 .map_err(|e| format!("Failed to set rate limit expiry: {}", e))?;
         }

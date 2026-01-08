@@ -84,7 +84,10 @@ pub async fn send_message(
         }
         Err(e) => {
             log::error!("Rate limit check failed: {}", e);
-            // Continue anyway if Redis fails
+            // If Redis fails, deny the request to maintain security
+            return HttpResponse::ServiceUnavailable().json(ErrorResponse {
+                error: "Rate limiting service temporarily unavailable. Please try again later.".to_string(),
+            });
         }
     }
 
