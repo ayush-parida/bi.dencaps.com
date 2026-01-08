@@ -67,8 +67,8 @@ export class RenderingService {
   }
 
   private validateTextContent(item: any, index: number): void {
-    if (!item.content || typeof item.content !== 'string') {
-      throw new Error(`Invalid text content at index ${index}: content must be a non-empty string`);
+    if (item.content == null || typeof item.content !== 'string') {
+      throw new Error(`Invalid text content at index ${index}: content must be a string`);
     }
   }
 
@@ -98,8 +98,11 @@ export class RenderingService {
   }
 
   private validateEquationContent(item: any, index: number): void {
-    if (!item.latex || typeof item.latex !== 'string') {
-      throw new Error(`Invalid equation content at index ${index}: latex must be a non-empty string`);
+    if (item.latex == null || typeof item.latex !== 'string') {
+      throw new Error(`Invalid equation content at index ${index}: latex must be a string`);
+    }
+    if (item.latex.trim() === '') {
+      throw new Error(`Invalid equation content at index ${index}: latex cannot be empty`);
     }
   }
 
@@ -128,8 +131,12 @@ export class RenderingService {
       throw new Error(`Invalid dataset content at index ${index}: data must be an object`);
     }
 
-    if (!item.data.name || typeof item.data.name !== 'string') {
-      throw new Error(`Invalid dataset content at index ${index}: name must be a non-empty string`);
+    if (item.data.name == null || typeof item.data.name !== 'string') {
+      throw new Error(`Invalid dataset content at index ${index}: name must be a string`);
+    }
+
+    if (item.data.name.trim() === '') {
+      throw new Error(`Invalid dataset content at index ${index}: name cannot be empty`);
     }
 
     if (!Array.isArray(item.data.columns) || item.data.columns.length === 0) {

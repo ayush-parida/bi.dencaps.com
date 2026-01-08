@@ -1,5 +1,6 @@
 import { Component, Input, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 import { RenderItem, StructuredResponse } from './rendering.models';
 import { RenderingService } from './rendering.service';
 import { ChartRendererComponent } from './chart-renderer.component';
@@ -126,7 +127,10 @@ export class ContentRendererComponent implements OnInit {
   structuredResponse?: StructuredResponse;
   error?: string;
 
-  constructor(private renderingService: RenderingService) {}
+  constructor(
+    private renderingService: RenderingService,
+    private sanitizer: DomSanitizer
+  ) {}
 
   ngOnInit(): void {
     this.parseResponse();
@@ -143,12 +147,10 @@ export class ContentRendererComponent implements OnInit {
     }
   }
 
-  sanitizeHtml(content: string): string {
-    // Basic sanitization - in production, consider using DomSanitizer or a library
-    // For now, we'll allow basic HTML but escape script tags
-    return content
-      .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
-      .replace(/\n/g, '<br>');
+  sanitizeHtml(content: string): SafeHtml {
+    // Sanitize HTML content to prevent XSS attacks
+    // This removes dangerous elements and attributes while preserving safe formatting
+    return this.sanitizer.sanitize(1, content) || ''; // 1 is SecurityContext.HTML
   }
 
   trackByIndex(index: number): number {
