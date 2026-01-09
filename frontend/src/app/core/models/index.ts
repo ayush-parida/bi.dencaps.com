@@ -114,3 +114,5 @@ export interface ConversationSummary {
   updated_at: string;
 }
 
+// Re-export permission models
+export * from './permission.model';

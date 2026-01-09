@@ -2,9 +2,10 @@ use actix_web::{web, HttpResponse, HttpRequest, HttpMessage};
 use serde::Serialize;
 use validator::Validate;
 use uuid::Uuid;
-use crate::models::{SendMessageDto, ChatResponse, ConversationResponse};
-use crate::services::{ChatService, ProjectService};
+use crate::models::{SendMessageDto, ChatResponse, ConversationResponse, Permission};
+use crate::services::{ChatService, RbacService};
 use crate::utils::Claims;
+use crate::middleware::check_permission;
 
 #[derive(Debug, Serialize)]
 struct ErrorResponse {
@@ -13,7 +14,7 @@ struct ErrorResponse {
 
 pub async fn send_message(
     chat_service: web::Data<ChatService>,
-    project_service: web::Data<ProjectService>,
+    rbac_service: web::Data<RbacService>,
     req: HttpRequest,
     dto: web::Json<SendMessageDto>,
 ) -> HttpResponse {
@@ -44,6 +45,16 @@ pub async fn send_message(
         }
     };
 
+    // Check permission to write to chat in this project
+    if let Err(e) = check_permission(
+        &rbac_service,
+        &claims.user_id,
+        Some(&dto.project_id),
+        Permission::ChatWrite
+    ).await {
+        return HttpResponse::Forbidden().json(ErrorResponse { error: e.to_string() });
+    }
+
     // Parse project_id
     let project_id = match Uuid::parse_str(&dto.project_id) {
         Ok(id) => id,
@@ -53,26 +64,6 @@ pub async fn send_message(
             });
         }
     };
-
-    // Verify user has access to the project
-    match project_service
-        .get_project_by_id(&project_id)
-        .await
-    {
-        Ok(project) => {
-            // Check if user has access to this project
-            if project.tenant_id != claims.tenant_id {
-                return HttpResponse::Forbidden().json(ErrorResponse {
-                    error: "Access denied to this project".to_string(),
-                });
-            }
-        }
-        Err(e) => {
-            return HttpResponse::NotFound().json(ErrorResponse {
-                error: format!("Project not found: {}", e),
-            });
-        }
-    }
 
     // Check rate limit
     match chat_service.check_rate_limit(&user_id).await {
@@ -130,6 +121,7 @@ pub async fn send_message(
 
 pub async fn get_conversation(
     chat_service: web::Data<ChatService>,
+    rbac_service: web::Data<RbacService>,
     req: HttpRequest,
     path: web::Path<String>,
 ) -> HttpResponse {
@@ -163,12 +155,19 @@ pub async fn get_conversation(
         }
     };
 
-    // Get conversation
-    match chat_service
-        .get_conversation(&conversation_id, &user_id)
-        .await
-    {
+    // Get conversation first to check project_id
+    match chat_service.get_conversation(&conversation_id, &user_id).await {
         Ok(Some(conversation)) => {
+            // Check permission using RBAC for the project this conversation belongs to
+            if let Err(e) = check_permission(
+                &rbac_service,
+                &claims.user_id,
+                Some(&conversation.project_id.to_string()),
+                Permission::ChatRead
+            ).await {
+                return HttpResponse::Forbidden().json(ErrorResponse { error: e.to_string() });
+            }
+            
             let response: ConversationResponse = conversation.into();
             HttpResponse::Ok().json(response)
         }
@@ -186,7 +185,7 @@ pub async fn get_conversation(
 
 pub async fn get_project_conversations(
     chat_service: web::Data<ChatService>,
-    project_service: web::Data<ProjectService>,
+    rbac_service: web::Data<RbacService>,
     req: HttpRequest,
     path: web::Path<String>,
 ) -> HttpResponse {
@@ -210,8 +209,20 @@ pub async fn get_project_conversations(
         }
     };
 
+    let project_id_str = path.into_inner();
+
+    // Check permission to read chat in this project
+    if let Err(e) = check_permission(
+        &rbac_service,
+        &claims.user_id,
+        Some(&project_id_str),
+        Permission::ChatRead
+    ).await {
+        return HttpResponse::Forbidden().json(ErrorResponse { error: e.to_string() });
+    }
+
     // Parse project_id
-    let project_id = match Uuid::parse_str(&path.into_inner()) {
+    let project_id = match Uuid::parse_str(&project_id_str) {
         Ok(id) => id,
         Err(_) => {
             return HttpResponse::BadRequest().json(ErrorResponse {
@@ -219,26 +230,6 @@ pub async fn get_project_conversations(
             });
         }
     };
-
-    // Verify user has access to the project
-    match project_service
-        .get_project_by_id(&project_id)
-        .await
-    {
-        Ok(project) => {
-            // Check if user has access to this project
-            if project.tenant_id != claims.tenant_id {
-                return HttpResponse::Forbidden().json(ErrorResponse {
-                    error: "Access denied to this project".to_string(),
-                });
-            }
-        }
-        Err(e) => {
-            return HttpResponse::NotFound().json(ErrorResponse {
-                error: format!("Project not found: {}", e),
-            });
-        }
-    }
 
     // Get conversations
     match chat_service
@@ -258,7 +249,7 @@ pub async fn get_project_conversations(
 /// Get lightweight conversation summaries for a project (without message content)
 pub async fn get_project_conversation_summaries(
     chat_service: web::Data<ChatService>,
-    project_service: web::Data<ProjectService>,
+    rbac_service: web::Data<RbacService>,
     req: HttpRequest,
     path: web::Path<String>,
 ) -> HttpResponse {
@@ -282,8 +273,20 @@ pub async fn get_project_conversation_summaries(
         }
     };
 
+    let project_id_str = path.into_inner();
+
+    // Check permission to read chat in this project
+    if let Err(e) = check_permission(
+        &rbac_service,
+        &claims.user_id,
+        Some(&project_id_str),
+        Permission::ChatRead
+    ).await {
+        return HttpResponse::Forbidden().json(ErrorResponse { error: e.to_string() });
+    }
+
     // Parse project_id
-    let project_id = match Uuid::parse_str(&path.into_inner()) {
+    let project_id = match Uuid::parse_str(&project_id_str) {
         Ok(id) => id,
         Err(_) => {
             return HttpResponse::BadRequest().json(ErrorResponse {
@@ -291,26 +294,6 @@ pub async fn get_project_conversation_summaries(
             });
         }
     };
-
-    // Verify user has access to the project
-    match project_service
-        .get_project_by_id(&project_id)
-        .await
-    {
-        Ok(project) => {
-            // Check if user has access to this project
-            if project.tenant_id != claims.tenant_id {
-                return HttpResponse::Forbidden().json(ErrorResponse {
-                    error: "Access denied to this project".to_string(),
-                });
-            }
-        }
-        Err(e) => {
-            return HttpResponse::NotFound().json(ErrorResponse {
-                error: format!("Project not found: {}", e),
-            });
-        }
-    }
 
     // Get conversation summaries
     match chat_service

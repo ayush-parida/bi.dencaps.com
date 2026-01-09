@@ -61,6 +61,7 @@ async fn main() -> std::io::Result<()> {
         config.chat_rate_limit_window_secs,
         config.chat_context_message_limit,
     ));
+    let rbac_service = web::Data::new(services::RbacService::new(db_manager.clone()));
 
     let jwt_manager_data = web::Data::new(jwt_manager.clone());
     let redis = db_manager.redis.clone();
@@ -95,6 +96,7 @@ async fn main() -> std::io::Result<()> {
             .app_data(project_service.clone())
             .app_data(analytics_service.clone())
             .app_data(chat_service.clone())
+            .app_data(rbac_service.clone())
             .app_data(jwt_manager_data.clone())
             // Public routes
             .service(
@@ -115,12 +117,21 @@ async fn main() -> std::io::Result<()> {
                     .service(
                         web::scope("/users")
                             .route("/me", web::get().to(handlers::auth::get_current_user))
+                            .route("/me/password", web::put().to(handlers::user::change_password))
+                            .route("", web::get().to(handlers::user::get_users))
+                            .route("", web::post().to(handlers::user::create_user))
+                            .route("/search", web::get().to(handlers::user::search_users))
+                            .route("/{user_id}", web::get().to(handlers::user::get_user))
+                            .route("/{user_id}", web::put().to(handlers::user::update_user))
+                            .route("/{user_id}", web::delete().to(handlers::user::delete_user))
+                            .route("/{user_id}/password", web::put().to(handlers::user::reset_user_password))
                     )
                     .service(
                         web::scope("/projects")
                             .route("", web::post().to(handlers::project::create_project))
                             .route("", web::get().to(handlers::project::get_user_projects))
                             .route("/{project_id}", web::get().to(handlers::project::get_project_by_id))
+                            .route("/{project_id}/members", web::get().to(handlers::rbac::get_project_members))
                     )
                     .service(
                         web::scope("/analytics")
@@ -135,6 +146,20 @@ async fn main() -> std::io::Result<()> {
                             .route("/conversations/{conversation_id}", web::get().to(handlers::chat::get_conversation))
                             .route("/projects/{project_id}/conversations", web::get().to(handlers::chat::get_project_conversations))
                             .route("/projects/{project_id}/conversations/summaries", web::get().to(handlers::chat::get_project_conversation_summaries))
+                    )
+                    .service(
+                        web::scope("/rbac")
+                            .route("/permissions", web::get().to(handlers::rbac::get_all_permissions))
+                            .route("/permissions/me", web::get().to(handlers::rbac::get_my_permissions))
+                            .route("/roles", web::post().to(handlers::rbac::create_role))
+                            .route("/roles", web::get().to(handlers::rbac::get_roles))
+                            .route("/roles/{role_id}", web::get().to(handlers::rbac::get_role))
+                            .route("/roles/{role_id}", web::put().to(handlers::rbac::update_role))
+                            .route("/roles/{role_id}", web::delete().to(handlers::rbac::delete_role))
+                            .route("/memberships", web::post().to(handlers::rbac::assign_role))
+                            .route("/memberships/me", web::get().to(handlers::rbac::get_my_memberships))
+                            .route("/memberships/{project_id}/{user_id}", web::delete().to(handlers::rbac::revoke_role))
+                            .route("/initialize", web::post().to(handlers::rbac::initialize_system_roles))
                     )
             )
     })

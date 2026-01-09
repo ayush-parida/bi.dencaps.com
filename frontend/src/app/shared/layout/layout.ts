@@ -7,6 +7,8 @@ import { AuthService } from '../../core/services/auth.service';
 import { ProjectService } from '../../core/services/project.service';
 import { ChatService } from '../../core/services/chat.service';
 import { Project, ConversationSummary } from '../../core/models';
+import { HasPermissionDirective } from '../directives/permission.directive';
+import { Permission } from '../../core/models/permission.model';
 
 interface ConversationWithProject extends ConversationSummary {
   // project_id is already in ConversationSummary
@@ -15,7 +17,7 @@ interface ConversationWithProject extends ConversationSummary {
 @Component({
   selector: 'app-layout',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink, RouterLinkActive, RouterOutlet],
+  imports: [CommonModule, FormsModule, RouterLink, RouterLinkActive, RouterOutlet, HasPermissionDirective],
   templateUrl: './layout.html',
   styleUrl: './layout.scss',
 })
@@ -25,6 +27,8 @@ export class Layout implements OnInit, OnDestroy {
   private readonly chatService = inject(ChatService);
   private readonly router = inject(Router);
   private readonly destroy$ = new Subject<void>();
+  
+  readonly Permission = Permission;
   
   currentUser$ = this.authService.currentUser$;
   

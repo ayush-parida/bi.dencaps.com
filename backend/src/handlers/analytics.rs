@@ -1,9 +1,10 @@
 use actix_web::{web, HttpResponse, HttpRequest, HttpMessage};
 use serde::Serialize;
 use validator::Validate;
-use crate::models::CreateQueryDto;
-use crate::services::{AnalyticsService, ProjectService};
+use crate::models::{CreateQueryDto, Permission};
+use crate::services::{AnalyticsService, RbacService};
 use crate::utils::Claims;
+use crate::middleware::check_permission;
 
 #[derive(Debug, Serialize)]
 struct ErrorResponse {
@@ -12,7 +13,7 @@ struct ErrorResponse {
 
 pub async fn create_query(
     analytics_service: web::Data<AnalyticsService>,
-    project_service: web::Data<ProjectService>,
+    rbac_service: web::Data<RbacService>,
     dto: web::Json<CreateQueryDto>,
     req: HttpRequest,
 ) -> HttpResponse {
@@ -41,27 +42,14 @@ pub async fn create_query(
         }
     };
 
-    // Check project access
-    let project_id = match uuid::Uuid::parse_str(&dto.project_id) {
-        Ok(id) => id,
-        Err(_) => {
-            return HttpResponse::BadRequest().json(ErrorResponse {
-                error: "Invalid project ID".to_string(),
-            });
-        }
-    };
-
-    match project_service.check_user_access(&project_id, &user_id, &claims.role, &claims.tenant_id).await {
-        Ok(has_access) => {
-            if !has_access {
-                return HttpResponse::Forbidden().json(ErrorResponse {
-                    error: "Access denied to this project".to_string(),
-                });
-            }
-        }
-        Err(e) => {
-            return HttpResponse::NotFound().json(ErrorResponse { error: e });
-        }
+    // Check permission to create reports in this project
+    if let Err(e) = check_permission(
+        &rbac_service,
+        &claims.user_id,
+        Some(&dto.project_id),
+        Permission::ReportCreate
+    ).await {
+        return HttpResponse::Forbidden().json(ErrorResponse { error: e.to_string() });
     }
 
     match analytics_service.create_query(dto.into_inner(), &user_id).await {
@@ -72,6 +60,7 @@ pub async fn create_query(
 
 pub async fn process_query(
     analytics_service: web::Data<AnalyticsService>,
+    rbac_service: web::Data<RbacService>,
     query_id: web::Path<String>,
     req: HttpRequest,
 ) -> HttpResponse {
@@ -85,7 +74,7 @@ pub async fn process_query(
         }
     };
 
-    let query_uuid = match uuid::Uuid::parse_str(&query_id) {
+    let query_uuid = match uuid::Uuid::parse_str(&query_id.as_str()) {
         Ok(id) => id,
         Err(_) => {
             return HttpResponse::BadRequest().json(ErrorResponse {
@@ -93,6 +82,24 @@ pub async fn process_query(
             });
         }
     };
+
+    // Get the query first to check project_id
+    let query = match analytics_service.get_query_by_id(&query_uuid).await {
+        Ok(q) => q,
+        Err(e) => {
+            return HttpResponse::NotFound().json(ErrorResponse { error: e });
+        }
+    };
+
+    // Check permission to read reports in this project
+    if let Err(e) = check_permission(
+        &rbac_service,
+        &claims.user_id,
+        Some(&query.project_id),
+        Permission::ReportRead
+    ).await {
+        return HttpResponse::Forbidden().json(ErrorResponse { error: e.to_string() });
+    }
 
     match analytics_service.process_query(&query_uuid).await {
         Ok(response) => HttpResponse::Ok().json(serde_json::json!({
@@ -105,7 +112,7 @@ pub async fn process_query(
 
 pub async fn get_query_by_id(
     analytics_service: web::Data<AnalyticsService>,
-    project_service: web::Data<ProjectService>,
+    rbac_service: web::Data<RbacService>,
     query_id: web::Path<String>,
     req: HttpRequest,
 ) -> HttpResponse {
@@ -128,15 +135,6 @@ pub async fn get_query_by_id(
         }
     };
 
-    let user_id = match uuid::Uuid::parse_str(&claims.user_id) {
-        Ok(id) => id,
-        Err(_) => {
-            return HttpResponse::BadRequest().json(ErrorResponse {
-                error: "Invalid user ID".to_string(),
-            });
-        }
-    };
-
     let query = match analytics_service.get_query_by_id(&query_uuid).await {
         Ok(q) => q,
         Err(e) => {
@@ -144,28 +142,14 @@ pub async fn get_query_by_id(
         }
     };
 
-    // Parse project_id from query
-    let project_uuid = match uuid::Uuid::parse_str(&query.project_id) {
-        Ok(id) => id,
-        Err(_) => {
-            return HttpResponse::BadRequest().json(ErrorResponse {
-                error: "Invalid project ID in query".to_string(),
-            });
-        }
-    };
-
-    // Check project access
-    match project_service.check_user_access(&project_uuid, &user_id, &claims.role, &claims.tenant_id).await {
-        Ok(has_access) => {
-            if !has_access {
-                return HttpResponse::Forbidden().json(ErrorResponse {
-                    error: "Access denied to this query".to_string(),
-                });
-            }
-        }
-        Err(e) => {
-            return HttpResponse::NotFound().json(ErrorResponse { error: e });
-        }
+    // Check permission to read reports in this project
+    if let Err(e) = check_permission(
+        &rbac_service,
+        &claims.user_id,
+        Some(&query.project_id),
+        Permission::ReportRead
+    ).await {
+        return HttpResponse::Forbidden().json(ErrorResponse { error: e.to_string() });
     }
 
     HttpResponse::Ok().json(query)
@@ -173,7 +157,7 @@ pub async fn get_query_by_id(
 
 pub async fn get_project_queries(
     analytics_service: web::Data<AnalyticsService>,
-    project_service: web::Data<ProjectService>,
+    rbac_service: web::Data<RbacService>,
     project_id: web::Path<String>,
     req: HttpRequest,
 ) -> HttpResponse {
@@ -187,7 +171,19 @@ pub async fn get_project_queries(
         }
     };
 
-    let project_uuid = match uuid::Uuid::parse_str(&project_id) {
+    let project_id_str = project_id.into_inner();
+
+    // Check permission to read reports in this project
+    if let Err(e) = check_permission(
+        &rbac_service,
+        &claims.user_id,
+        Some(&project_id_str),
+        Permission::ReportRead
+    ).await {
+        return HttpResponse::Forbidden().json(ErrorResponse { error: e.to_string() });
+    }
+
+    let project_uuid = match uuid::Uuid::parse_str(&project_id_str) {
         Ok(id) => id,
         Err(_) => {
             return HttpResponse::BadRequest().json(ErrorResponse {
@@ -195,29 +191,6 @@ pub async fn get_project_queries(
             });
         }
     };
-
-    let user_id = match uuid::Uuid::parse_str(&claims.user_id) {
-        Ok(id) => id,
-        Err(_) => {
-            return HttpResponse::BadRequest().json(ErrorResponse {
-                error: "Invalid user ID".to_string(),
-            });
-        }
-    };
-
-    // Check project access
-    match project_service.check_user_access(&project_uuid, &user_id, &claims.role, &claims.tenant_id).await {
-        Ok(has_access) => {
-            if !has_access {
-                return HttpResponse::Forbidden().json(ErrorResponse {
-                    error: "Access denied to this project".to_string(),
-                });
-            }
-        }
-        Err(e) => {
-            return HttpResponse::NotFound().json(ErrorResponse { error: e });
-        }
-    }
 
     match analytics_service.get_project_queries(&project_uuid).await {
         Ok(queries) => HttpResponse::Ok().json(queries),

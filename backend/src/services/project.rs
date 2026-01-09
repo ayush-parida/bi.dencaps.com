@@ -1,7 +1,7 @@
 use mongodb::bson::{doc, DateTime};
 use uuid::Uuid;
 use crate::db::DatabaseManager;
-use crate::models::{Project, CreateProjectDto, ProjectResponse};
+use crate::models::{Project, CreateProjectDto, UpdateProjectDto, ProjectResponse};
 
 pub struct ProjectService {
     db: DatabaseManager,
@@ -121,5 +121,60 @@ impl ProjectService {
         let user_id_str = user_id.to_string();
         Ok(project.owner_id == user_id_str || 
            project.member_ids.contains(&user_id_str))
+    }
+
+    pub async fn update_project(
+        &self,
+        project_id: &Uuid,
+        dto: UpdateProjectDto,
+        tenant_id: &str,
+    ) -> Result<Project, String> {
+        let project_id_str = project_id.to_string();
+        let now = DateTime::now();
+
+        // Build update document
+        let mut update_doc = doc! { "updated_at": now };
+        
+        if let Some(name) = dto.name {
+            update_doc.insert("name", name);
+        }
+        if let Some(description) = dto.description {
+            update_doc.insert("description", description);
+        }
+
+        // Update with tenant check for security
+        let result = self.db
+            .projects_collection()
+            .find_one_and_update(
+                doc! { "project_id": &project_id_str, "tenant_id": tenant_id },
+                doc! { "$set": update_doc },
+            )
+            .await
+            .map_err(|e| format!("Database error: {}", e))?
+            .ok_or_else(|| "Project not found".to_string())?;
+
+        // Fetch updated project
+        self.get_project_by_id(project_id).await
+    }
+
+    pub async fn delete_project(
+        &self,
+        project_id: &Uuid,
+        tenant_id: &str,
+    ) -> Result<(), String> {
+        let project_id_str = project_id.to_string();
+
+        // Delete with tenant check for security
+        let result = self.db
+            .projects_collection()
+            .delete_one(doc! { "project_id": &project_id_str, "tenant_id": tenant_id })
+            .await
+            .map_err(|e| format!("Database error: {}", e))?;
+
+        if result.deleted_count == 0 {
+            return Err("Project not found or access denied".to_string());
+        }
+
+        Ok(())
     }
 }

@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 use mongodb::bson::{oid::ObjectId, DateTime};
 use validator::Validate;
+use std::collections::HashSet;
 
 // Custom serialization for UUID as string in MongoDB
 mod uuid_as_string {
@@ -22,6 +23,270 @@ mod uuid_as_string {
         Uuid::parse_str(&s).map_err(serde::de::Error::custom)
     }
 }
+
+// ============================================================================
+// RBAC Permission System
+// ============================================================================
+
+/// All available permissions in the system
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Permission {
+    // Project Management
+    ProjectCreate,
+    ProjectRead,
+    ProjectUpdate,
+    ProjectDelete,
+    ProjectManageMembers,
+    
+    // User Management
+    UserCreate,
+    UserRead,
+    UserUpdate,
+    UserDelete,
+    UserManageRoles,
+    
+    // Chat
+    ChatRead,
+    ChatWrite,
+    ChatDelete,
+    ChatExport,
+    
+    // Reports/Analytics
+    ReportCreate,
+    ReportRead,
+    ReportExport,
+    ReportDelete,
+    
+    // Admin
+    AdminAccess,
+    SystemSettings,
+}
+
+impl Permission {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Permission::ProjectCreate => "project:create",
+            Permission::ProjectRead => "project:read",
+            Permission::ProjectUpdate => "project:update",
+            Permission::ProjectDelete => "project:delete",
+            Permission::ProjectManageMembers => "project:manage_members",
+            Permission::UserCreate => "user:create",
+            Permission::UserRead => "user:read",
+            Permission::UserUpdate => "user:update",
+            Permission::UserDelete => "user:delete",
+            Permission::UserManageRoles => "user:manage_roles",
+            Permission::ChatRead => "chat:read",
+            Permission::ChatWrite => "chat:write",
+            Permission::ChatDelete => "chat:delete",
+            Permission::ChatExport => "chat:export",
+            Permission::ReportCreate => "report:create",
+            Permission::ReportRead => "report:read",
+            Permission::ReportExport => "report:export",
+            Permission::ReportDelete => "report:delete",
+            Permission::AdminAccess => "admin:access",
+            Permission::SystemSettings => "system:settings",
+        }
+    }
+
+    pub fn from_str(s: &str) -> Option<Self> {
+        match s {
+            "project:create" => Some(Permission::ProjectCreate),
+            "project:read" => Some(Permission::ProjectRead),
+            "project:update" => Some(Permission::ProjectUpdate),
+            "project:delete" => Some(Permission::ProjectDelete),
+            "project:manage_members" => Some(Permission::ProjectManageMembers),
+            "user:create" => Some(Permission::UserCreate),
+            "user:read" => Some(Permission::UserRead),
+            "user:update" => Some(Permission::UserUpdate),
+            "user:delete" => Some(Permission::UserDelete),
+            "user:manage_roles" => Some(Permission::UserManageRoles),
+            "chat:read" => Some(Permission::ChatRead),
+            "chat:write" => Some(Permission::ChatWrite),
+            "chat:delete" => Some(Permission::ChatDelete),
+            "chat:export" => Some(Permission::ChatExport),
+            "report:create" => Some(Permission::ReportCreate),
+            "report:read" => Some(Permission::ReportRead),
+            "report:export" => Some(Permission::ReportExport),
+            "report:delete" => Some(Permission::ReportDelete),
+            "admin:access" => Some(Permission::AdminAccess),
+            "system:settings" => Some(Permission::SystemSettings),
+            _ => None,
+        }
+    }
+
+    pub fn all() -> Vec<Permission> {
+        vec![
+            Permission::ProjectCreate,
+            Permission::ProjectRead,
+            Permission::ProjectUpdate,
+            Permission::ProjectDelete,
+            Permission::ProjectManageMembers,
+            Permission::UserCreate,
+            Permission::UserRead,
+            Permission::UserUpdate,
+            Permission::UserDelete,
+            Permission::UserManageRoles,
+            Permission::ChatRead,
+            Permission::ChatWrite,
+            Permission::ChatDelete,
+            Permission::ChatExport,
+            Permission::ReportCreate,
+            Permission::ReportRead,
+            Permission::ReportExport,
+            Permission::ReportDelete,
+            Permission::AdminAccess,
+            Permission::SystemSettings,
+        ]
+    }
+}
+
+/// Role definition with associated permissions
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct Role {
+    #[serde(rename = "_id", skip_serializing_if = "Option::is_none")]
+    pub id: Option<ObjectId>,
+    pub role_id: String,
+    pub name: String,
+    pub description: String,
+    pub permissions: Vec<String>, // Permission strings
+    pub is_system_role: bool,     // Cannot be deleted if true
+    pub tenant_id: String,
+    pub created_at: DateTime,
+    pub updated_at: DateTime,
+}
+
+impl Role {
+    pub fn get_permissions(&self) -> HashSet<Permission> {
+        self.permissions
+            .iter()
+            .filter_map(|p| Permission::from_str(p))
+            .collect()
+    }
+}
+
+/// User-Project role assignment
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct ProjectMembership {
+    #[serde(rename = "_id", skip_serializing_if = "Option::is_none")]
+    pub id: Option<ObjectId>,
+    pub membership_id: String,
+    pub user_id: String,
+    pub project_id: String,
+    pub role_id: String,
+    pub tenant_id: String,
+    pub created_at: DateTime,
+    pub updated_at: DateTime,
+}
+
+/// Resolved permissions for a user in a project context
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ResolvedPermissions {
+    pub user_id: String,
+    pub project_id: Option<String>,
+    pub permissions: HashSet<String>,
+    pub is_admin: bool,
+    pub resolved_at: i64,
+}
+
+impl ResolvedPermissions {
+    pub fn has_permission(&self, permission: Permission) -> bool {
+        self.is_admin || self.permissions.contains(permission.as_str())
+    }
+
+    pub fn has_any_permission(&self, permissions: &[Permission]) -> bool {
+        self.is_admin || permissions.iter().any(|p| self.permissions.contains(p.as_str()))
+    }
+
+    pub fn has_all_permissions(&self, permissions: &[Permission]) -> bool {
+        self.is_admin || permissions.iter().all(|p| self.permissions.contains(p.as_str()))
+    }
+}
+
+// ============================================================================
+// DTOs for RBAC
+// ============================================================================
+
+#[derive(Debug, Deserialize, Validate)]
+pub struct CreateRoleDto {
+    #[validate(length(min = 2, max = 50))]
+    pub name: String,
+    #[validate(length(max = 200))]
+    pub description: String,
+    pub permissions: Vec<String>,
+}
+
+#[derive(Debug, Deserialize, Validate)]
+pub struct UpdateRoleDto {
+    #[validate(length(min = 2, max = 50))]
+    pub name: Option<String>,
+    #[validate(length(max = 200))]
+    pub description: Option<String>,
+    pub permissions: Option<Vec<String>>,
+}
+
+#[derive(Debug, Deserialize, Validate)]
+pub struct AssignRoleDto {
+    pub user_id: String,
+    pub project_id: String,
+    pub role_id: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct RoleResponse {
+    pub role_id: String,
+    pub name: String,
+    pub description: String,
+    pub permissions: Vec<String>,
+    pub is_system_role: bool,
+    pub created_at: String,
+}
+
+impl From<Role> for RoleResponse {
+    fn from(role: Role) -> Self {
+        RoleResponse {
+            role_id: role.role_id,
+            name: role.name,
+            description: role.description,
+            permissions: role.permissions,
+            is_system_role: role.is_system_role,
+            created_at: role.created_at.to_string(),
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
+pub struct ProjectMembershipResponse {
+    pub membership_id: String,
+    pub user_id: String,
+    pub project_id: String,
+    pub role_id: String,
+    pub role_name: Option<String>,
+    pub created_at: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct UserPermissionsResponse {
+    pub user_id: String,
+    pub project_id: Option<String>,
+    pub permissions: Vec<String>,
+    pub is_admin: bool,
+}
+
+impl From<ResolvedPermissions> for UserPermissionsResponse {
+    fn from(rp: ResolvedPermissions) -> Self {
+        UserPermissionsResponse {
+            user_id: rp.user_id,
+            project_id: rp.project_id,
+            permissions: rp.permissions.into_iter().collect(),
+            is_admin: rp.is_admin,
+        }
+    }
+}
+
+// ============================================================================
+// Existing Models (Updated)
+// ============================================================================
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub enum UserRole {
@@ -79,6 +344,42 @@ pub struct CreateUserDto {
     pub tenant_id: String,
 }
 
+/// DTO for admin creating a user with specific role
+#[derive(Debug, Deserialize, Validate)]
+pub struct AdminCreateUserDto {
+    #[validate(email)]
+    pub email: String,
+    #[validate(length(min = 8))]
+    pub password: String,
+    #[validate(length(min = 2))]
+    pub name: String,
+    pub role: Option<String>,
+}
+
+/// DTO for updating a user
+#[derive(Debug, Deserialize, Validate)]
+pub struct UpdateUserDto {
+    #[validate(length(min = 2))]
+    pub name: Option<String>,
+    pub role: Option<String>,
+    pub is_active: Option<bool>,
+}
+
+/// DTO for changing password
+#[derive(Debug, Deserialize, Validate)]
+pub struct ChangePasswordDto {
+    pub current_password: String,
+    #[validate(length(min = 8))]
+    pub new_password: String,
+}
+
+/// DTO for admin resetting user password
+#[derive(Debug, Deserialize, Validate)]
+pub struct ResetPasswordDto {
+    #[validate(length(min = 8))]
+    pub new_password: String,
+}
+
 #[derive(Debug, Deserialize, Validate)]
 pub struct LoginDto {
     #[validate(email)]
@@ -106,6 +407,13 @@ pub struct CreateProjectDto {
     #[validate(length(min = 3))]
     pub name: String,
     pub description: String,
+}
+
+#[derive(Debug, Deserialize, Validate)]
+pub struct UpdateProjectDto {
+    #[validate(length(min = 3))]
+    pub name: Option<String>,
+    pub description: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

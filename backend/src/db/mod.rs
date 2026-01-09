@@ -1,7 +1,7 @@
 use mongodb::{Client, Database, Collection};
 use redis::aio::ConnectionManager;
 use std::sync::Arc;
-use crate::models::{User, Project, AnalyticsQuery, Conversation};
+use crate::models::{User, Project, AnalyticsQuery, Conversation, Role, ProjectMembership};
 use crate::config::Config;
 
 #[derive(Clone)]
@@ -54,6 +54,14 @@ impl DatabaseManager {
 
     pub fn conversations_collection(&self) -> Collection<Conversation> {
         self.db.collection("conversations")
+    }
+
+    pub fn roles_collection(&self) -> Collection<Role> {
+        self.db.collection("roles")
+    }
+
+    pub fn memberships_collection(&self) -> Collection<ProjectMembership> {
+        self.db.collection("project_memberships")
     }
 
     pub async fn create_indexes(&self) -> Result<(), String> {
@@ -125,6 +133,56 @@ impl DatabaseManager {
             .create_indexes(vec![conversation_project_index, conversation_user_index, conversation_id_index])
             .await
             .map_err(|e| format!("Failed to create conversation indexes: {}", e))?;
+
+        // Role indexes
+        let role_id_index = IndexModel::builder()
+            .keys(doc! { "role_id": 1 })
+            .options(mongodb::options::IndexOptions::builder()
+                .unique(true)
+                .build())
+            .build();
+
+        let role_tenant_index = IndexModel::builder()
+            .keys(doc! { "tenant_id": 1 })
+            .build();
+
+        self.roles_collection()
+            .create_indexes(vec![role_id_index, role_tenant_index])
+            .await
+            .map_err(|e| format!("Failed to create role indexes: {}", e))?;
+
+        // Project Membership indexes
+        let membership_id_index = IndexModel::builder()
+            .keys(doc! { "membership_id": 1 })
+            .options(mongodb::options::IndexOptions::builder()
+                .unique(true)
+                .build())
+            .build();
+
+        let membership_user_project_index = IndexModel::builder()
+            .keys(doc! { "user_id": 1, "project_id": 1 })
+            .options(mongodb::options::IndexOptions::builder()
+                .unique(true)
+                .build())
+            .build();
+
+        let membership_project_index = IndexModel::builder()
+            .keys(doc! { "project_id": 1 })
+            .build();
+
+        let membership_role_index = IndexModel::builder()
+            .keys(doc! { "role_id": 1 })
+            .build();
+
+        self.memberships_collection()
+            .create_indexes(vec![
+                membership_id_index,
+                membership_user_project_index,
+                membership_project_index,
+                membership_role_index,
+            ])
+            .await
+            .map_err(|e| format!("Failed to create membership indexes: {}", e))?;
 
         log::info!("Database indexes created successfully");
         Ok(())

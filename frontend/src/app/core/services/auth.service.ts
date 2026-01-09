@@ -1,10 +1,11 @@
 import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
-import { BehaviorSubject, Observable, tap, catchError, throwError } from 'rxjs';
+import { BehaviorSubject, Observable, tap, catchError, throwError, switchMap } from 'rxjs';
 import { Router } from '@angular/router';
 import { environment } from '../../../environments/environment';
 import { AuthResponse, LoginRequest, RegisterRequest, User } from '../models';
 import { TokenService } from './token.service';
+import { PermissionService } from './permission.service';
 
 @Injectable({
   providedIn: 'root'
@@ -13,6 +14,7 @@ export class AuthService {
   private readonly http = inject(HttpClient);
   private readonly router = inject(Router);
   private readonly tokenService = inject(TokenService);
+  private readonly permissionService = inject(PermissionService);
   
   private currentUserSubject = new BehaviorSubject<User | null>(null);
   public currentUser$ = this.currentUserSubject.asObservable();
@@ -39,6 +41,7 @@ export class AuthService {
 
   logout(): void {
     this.tokenService.clearTokens();
+    this.permissionService.clearCache(); // Clear permission cache on logout
     this.currentUserSubject.next(null);
     this.router.navigate(['/auth/login']);
   }
@@ -87,11 +90,21 @@ export class AuthService {
     this.tokenService.setAccessToken(response.access_token);
     this.tokenService.setRefreshToken(response.refresh_token);
     this.currentUserSubject.next(response.user);
+    // Load user permissions after successful login
+    this.permissionService.getMyPermissions().subscribe({
+      error: (err) => console.warn('Failed to load initial permissions:', err)
+    });
   }
 
   private loadUserFromToken(): void {
     if (this.isAuthenticated()) {
       this.getCurrentUser().subscribe({
+        next: () => {
+          // Load permissions after user is loaded
+          this.permissionService.getMyPermissions().subscribe({
+            error: (err) => console.warn('Failed to load permissions:', err)
+          });
+        },
         error: (err) => {
           console.warn('Failed to load user from token:', err);
           // Don't logout here - let the interceptor handle 401s

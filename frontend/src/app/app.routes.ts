@@ -1,5 +1,7 @@
 import { Routes } from '@angular/router';
 import { authGuard } from './core/guards/auth.guard';
+import { permissionGuard } from './core/guards/permission.guard';
+import { Permission } from './core/models/permission.model';
 
 export const routes: Routes = [
   {
@@ -36,6 +38,12 @@ export const routes: Routes = [
       {
         path: 'chat',
         loadComponent: () => import('./features/chat/chat-interface/chat-interface').then(m => m.ChatInterfaceComponent)
+      },
+      {
+        path: 'users',
+        loadComponent: () => import('./features/users/user-list').then(m => m.UserListComponent),
+        canActivate: [permissionGuard],
+        data: { permission: Permission.UserRead }
       }
     ]
   },
