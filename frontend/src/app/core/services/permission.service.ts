@@ -21,13 +21,13 @@ export class PermissionService {
   private readonly http = inject(HttpClient);
   private readonly apiUrl = `${environment.apiUrl}/rbac`;
 
-  // Cache for resolved permissions per project
-  private readonly permissionsCache = new Map<string, ResolvedPermissions>();
+  // Cache for resolved permissions per project (now stores UserPermissionsResponse directly)
+  private readonly permissionsCache = new Map<string, UserPermissionsResponse>();
   private readonly cacheTimeout = 5 * 60 * 1000; // 5 minutes
   private readonly cacheTimestamps = new Map<string, number>();
 
   // Signal-based reactive state for current permissions
-  private readonly currentPermissionsSubject = new BehaviorSubject<ResolvedPermissions | null>(null);
+  private readonly currentPermissionsSubject = new BehaviorSubject<UserPermissionsResponse | null>(null);
   public readonly currentPermissions$ = this.currentPermissionsSubject.asObservable();
 
   // Signal for current project context
@@ -52,9 +52,10 @@ export class PermissionService {
       .pipe(
         tap(response => {
           const cacheKey = projectId || 'global';
-          this.permissionsCache.set(cacheKey, response.permissions);
+          // Store the full response which includes is_admin and permissions
+          this.permissionsCache.set(cacheKey, response);
           this.cacheTimestamps.set(cacheKey, Date.now());
-          this.currentPermissionsSubject.next(response.permissions);
+          this.currentPermissionsSubject.next(response);
         }),
         catchError(this.handleError)
       );

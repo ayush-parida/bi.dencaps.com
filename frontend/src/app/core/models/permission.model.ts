@@ -100,10 +100,13 @@ export interface AssignRoleRequest {
 
 /**
  * Response for user permissions endpoint
+ * Matches backend UserPermissionsResponse structure
  */
 export interface UserPermissionsResponse {
-  permissions: ResolvedPermissions;
-  roles: Role[];
+  user_id: string;
+  project_id: string | null;
+  permissions: string[];
+  is_admin: boolean;
 }
 
 /**
