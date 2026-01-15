@@ -292,7 +292,7 @@ pub async fn reset_user_password(
         });
     }
 
-    match user_service.reset_password(&user_id, &claims.tenant_id, &dto.new_password).await {
+    match user_service.reset_password(&user_id, &dto.new_password, &claims.tenant_id).await {
         Ok(_) => HttpResponse::Ok().json(MessageResponse {
             message: "Password reset successfully".to_string(),
         }),

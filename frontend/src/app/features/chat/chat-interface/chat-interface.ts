@@ -5,7 +5,8 @@ import { ActivatedRoute, Router } from '@angular/router';
 import { Subject, takeUntil } from 'rxjs';
 import { ChatService } from '../../../core/services/chat.service';
 import { ProjectService } from '../../../core/services/project.service';
-import { ChatMessage, Project } from '../../../core/models';
+import { PermissionService } from '../../../core/services/permission.service';
+import { ChatMessage, Project, Permission } from '../../../core/models';
 import { ContentRendererComponent } from '../../../shared/rendering';
 import { MarkdownRendererComponent } from '../../../shared/markdown-renderer/markdown-renderer.component';
 
@@ -19,6 +20,7 @@ import { MarkdownRendererComponent } from '../../../shared/markdown-renderer/mar
 export class ChatInterfaceComponent implements OnInit, OnDestroy {
   private readonly chatService = inject(ChatService);
   private readonly projectService = inject(ProjectService);
+  private readonly permissionService = inject(PermissionService);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private readonly destroy$ = new Subject<void>();
@@ -28,6 +30,13 @@ export class ChatInterfaceComponent implements OnInit, OnDestroy {
   projects = signal<Project[]>([]);
   currentConversationId = signal<string | null>(null);
   messages = signal<ChatMessage[]>([]);
+  
+  // Permission signals
+  canRead = signal<boolean>(false);
+  canWrite = signal<boolean>(false);
+  canExport = signal<boolean>(false);
+  canDelete = signal<boolean>(false);
+  permissionsLoaded = signal<boolean>(false);
   
   // Computed chat title from first user message
   chatTitle = computed(() => {
@@ -98,8 +107,16 @@ export class ChatInterfaceComponent implements OnInit, OnDestroy {
     this.messages.set([]);
     this.error.set(null);
     
+    // Reset permissions
+    this.canRead.set(false);
+    this.canWrite.set(false);
+    this.canExport.set(false);
+    this.canDelete.set(false);
+    this.permissionsLoaded.set(false);
+    
     if (projectId) {
       this.loadProject(projectId);
+      this.loadProjectPermissions(projectId);
       this.router.navigate(['/chat'], { 
         queryParams: { projectId } 
       });
@@ -107,6 +124,24 @@ export class ChatInterfaceComponent implements OnInit, OnDestroy {
       this.project.set(null);
       this.router.navigate(['/chat']);
     }
+  }
+
+  loadProjectPermissions(projectId: string): void {
+    this.permissionService.getMyPermissions(projectId)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: (permissions) => {
+          this.canRead.set(permissions.is_admin || permissions.permissions.includes(Permission.ChatRead));
+          this.canWrite.set(permissions.is_admin || permissions.permissions.includes(Permission.ChatWrite));
+          this.canExport.set(permissions.is_admin || permissions.permissions.includes(Permission.ChatExport));
+          this.canDelete.set(permissions.is_admin || permissions.permissions.includes(Permission.ChatDelete));
+          this.permissionsLoaded.set(true);
+        },
+        error: (err) => {
+          console.error('Failed to load permissions:', err);
+          this.permissionsLoaded.set(true);
+        }
+      });
   }
 
   loadProject(projectId: string): void {
@@ -145,6 +180,12 @@ export class ChatInterfaceComponent implements OnInit, OnDestroy {
     const pid = this.projectId();
     
     if (!message || !pid) {
+      return;
+    }
+
+    // Check permission before sending
+    if (!this.canWrite()) {
+      this.error.set('You do not have permission to send messages in this project.');
       return;
     }
 

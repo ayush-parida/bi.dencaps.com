@@ -34,6 +34,18 @@
     </div>
   </div>
 
+  <!-- Success Alert -->
+  @if (successMessage()) {
+    <div class="alert alert-success">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+        <polyline points="22 4 12 14.01 9 11.01"/>
+      </svg>
+      {{ successMessage() }}
+      <button class="close-btn" (click)="dismissSuccess()">&times;</button>
+    </div>
+  }
+
   <!-- Error Alert -->
   @if (error()) {
     <div class="alert alert-error">
@@ -42,7 +54,7 @@
         <path d="M12 8v4M12 16h.01"/>
       </svg>
       {{ error() }}
-      <button class="close-btn" (click)="error.set(null)">&times;</button>
+      <button class="close-btn" (click)="dismissError()">&times;</button>
     </div>
   }
 
@@ -91,9 +103,16 @@
                 </div>
               </td>
               <td>
-                <span class="badge" [ngClass]="getRoleBadgeClass(user.role)">
-                  {{ user.role | titlecase }}
-                </span>
+                <div class="role-info">
+                  <span class="badge" [ngClass]="getRoleBadgeClass(user.role)">
+                    {{ getRoleDisplayName(user.role) }}
+                  </span>
+                  @if (getRoleInfo(user.role); as roleInfo) {
+                    <span class="permission-count" title="Click to view permissions">
+                      {{ roleInfo.permissions.length }} permissions
+                    </span>
+                  }
+                </div>
               </td>
               <td>
                 <span class="status-badge" [ngClass]="getStatusClass(user.is_active)">
@@ -198,10 +217,9 @@
           <div class="form-group">
             <label for="create-role">Role</label>
             <select id="create-role" formControlName="role">
-              <option value="viewer">Viewer</option>
-              <option value="project_member">Project Member</option>
-              <option value="project_owner">Project Owner</option>
-              <option value="admin">Admin</option>
+              @for (roleOption of allRoleOptions(); track roleOption.value) {
+                <option [value]="roleOption.value">{{ roleOption.label }} - {{ roleOption.description }}</option>
+              }
             </select>
           </div>
         </div>
@@ -214,45 +232,168 @@
   </div>
 }
 
-<!-- Edit User Modal -->
+<!-- Edit User Modal (with tabbed project assignment) -->
 @if (showEditModal()) {
   <div class="modal-overlay" (click)="closeEditModal()">
-    <div class="modal" (click)="$event.stopPropagation()">
+    <div class="modal modal-lg" (click)="$event.stopPropagation()">
       <div class="modal-header">
         <h2>Edit User</h2>
         <button class="close-btn" (click)="closeEditModal()">&times;</button>
       </div>
-      <form [formGroup]="editForm" (ngSubmit)="submitEdit()">
+      
+      <!-- User Info Header -->
+      <div class="user-preview">
+        <div class="user-avatar large">{{ selectedUser()?.name?.charAt(0)?.toUpperCase() }}</div>
+        <div class="user-email">{{ selectedUser()?.email }}</div>
+      </div>
+      
+      <!-- Tab Navigation -->
+      <div class="modal-tabs">
+        <button 
+          class="tab-btn" 
+          [class.active]="editModalTab() === 'details'"
+          (click)="switchEditTab('details')">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+            <circle cx="12" cy="7" r="4"/>
+          </svg>
+          User Details
+        </button>
+        <button 
+          class="tab-btn" 
+          [class.active]="editModalTab() === 'projects'"
+          *hasPermission="Permission.ProjectManageMembers"
+          (click)="switchEditTab('projects')">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+          </svg>
+          Project Access
+        </button>
+      </div>
+      
+      <!-- Details Tab -->
+      @if (editModalTab() === 'details') {
+        <form [formGroup]="editForm" (ngSubmit)="submitEdit()">
+          <div class="modal-body">
+            <div class="form-group">
+              <label for="edit-name">Name</label>
+              <input type="text" id="edit-name" formControlName="name"/>
+            </div>
+            <div class="form-group" *hasPermission="Permission.UserManageRoles">
+              <label for="edit-role">Role</label>
+              <select id="edit-role" formControlName="role">
+                @for (roleOption of allRoleOptions(); track roleOption.value) {
+                  <option [value]="roleOption.value">{{ roleOption.label }}</option>
+                }
+              </select>
+              @if (getRoleInfo(editForm.value.role || ''); as roleInfo) {
+                <div class="role-permissions-preview">
+                  <span class="permissions-label">Permissions ({{ roleInfo.permissions.length }}):</span>
+                  <div class="permissions-list">
+                    @for (perm of roleInfo.permissions.slice(0, 5); track perm) {
+                      <span class="permission-tag">{{ perm }}</span>
+                    }
+                    @if (roleInfo.permissions.length > 5) {
+                      <span class="permission-tag more">+{{ roleInfo.permissions.length - 5 }} more</span>
+                    }
+                  </div>
+                </div>
+              }
+            </div>
+            <div class="form-group">
+              <label class="checkbox-label">
+                <input type="checkbox" formControlName="is_active"/>
+                User is active
+              </label>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" (click)="closeEditModal()">Cancel</button>
+            <button type="submit" class="btn btn-primary" [disabled]="editForm.invalid">Save Changes</button>
+          </div>
+        </form>
+      }
+      
+      <!-- Projects Tab -->
+      @if (editModalTab() === 'projects') {
         <div class="modal-body">
-          <div class="user-preview">
-            <div class="user-avatar large">{{ selectedUser()?.name?.charAt(0)?.toUpperCase() }}</div>
-            <div class="user-email">{{ selectedUser()?.email }}</div>
-          </div>
+          <!-- Currently Assigned Projects -->
+          @if (loadingMemberships()) {
+            <div class="loading-memberships">
+              <span class="spinner-sm"></span> Loading project assignments...
+            </div>
+          } @else if (userMemberships().length > 0) {
+            <div class="form-group">
+              <label>Currently Assigned Projects</label>
+              <div class="assigned-projects-list">
+                @for (membership of userMemberships(); track membership.project_id) {
+                  <div class="assigned-project-item">
+                    <div class="project-info">
+                      <span class="project-name">{{ membership.project_name }}</span>
+                      <span class="project-role">{{ membership.role_name }}</span>
+                    </div>
+                    <button 
+                      type="button" 
+                      class="btn btn-sm btn-danger" 
+                      title="Remove from project"
+                      (click)="removeProjectAssignment(membership.project_id)">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M18 6L6 18M6 6l12 12"/>
+                      </svg>
+                    </button>
+                  </div>
+                }
+              </div>
+            </div>
+          }
+          
           <div class="form-group">
-            <label for="edit-name">Name</label>
-            <input type="text" id="edit-name" formControlName="name"/>
+            <label>Add to Projects</label>
+            @if (projects().length === 0) {
+              <p class="hint-text">No projects available. Create a project first.</p>
+            } @else {
+              <div class="project-checklist">
+                @for (project of projects(); track project.project_id) {
+                  <label class="checkbox-item" [class.selected]="isProjectSelected(project.project_id)">
+                    <input 
+                      type="checkbox" 
+                      [checked]="isProjectSelected(project.project_id)"
+                      (change)="toggleProjectSelection(project.project_id)">
+                    <div class="project-info">
+                      <span class="project-name">{{ project.name }}</span>
+                      @if (project.description) {
+                        <span class="project-desc">{{ project.description }}</span>
+                      }
+                      @if (isUserAssignedToProject(project.project_id)) {
+                        <span class="already-assigned-badge">Assigned</span>
+                      }
+                    </div>
+                  </label>
+                }
+              </div>
+              <span class="hint-text">{{ selectedProjectIds().length }} project(s) selected</span>
+            }
           </div>
-          <div class="form-group" *hasPermission="Permission.UserManageRoles">
-            <label for="edit-role">Role</label>
-            <select id="edit-role" formControlName="role">
-              <option value="viewer">Viewer</option>
-              <option value="project_member">Project Member</option>
-              <option value="project_owner">Project Owner</option>
-              <option value="admin">Admin</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label class="checkbox-label">
-              <input type="checkbox" formControlName="is_active"/>
-              User is active
-            </label>
+          
+          <div class="info-box">
+            <svg class="info-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10"/>
+              <path d="M12 16v-4M12 8h.01"/>
+            </svg>
+            <p>Select projects to give the user access. They will be assigned as Project Member.</p>
           </div>
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-secondary" (click)="closeEditModal()">Cancel</button>
-          <button type="submit" class="btn btn-primary" [disabled]="editForm.invalid">Save Changes</button>
+          <button 
+            type="button" 
+            class="btn btn-primary" 
+            [disabled]="selectedProjectIds().length === 0" 
+            (click)="submitAssignProjects()">
+            Assign to {{ selectedProjectIds().length }} Project(s)
+          </button>
         </div>
-      </form>
+      }
     </div>
   </div>
 }
@@ -285,3 +426,4 @@
     </div>
   </div>
 }
+

@@ -189,6 +189,20 @@ export class PermissionService {
   // ==================== Membership Management ====================
 
   /**
+   * Get current user's memberships
+   */
+  getMyMemberships(): Observable<ProjectMembership[]> {
+    return this.http.get<ProjectMembership[]>(`${this.apiUrl}/memberships/me`);
+  }
+
+  /**
+   * Get a specific user's memberships (admin only)
+   */
+  getUserMemberships(userId: string): Observable<ProjectMembership[]> {
+    return this.http.get<ProjectMembership[]>(`${this.apiUrl}/memberships/user/${userId}`);
+  }
+
+  /**
    * Assign a role to a user for a project
    */
   assignRole(request: AssignRoleRequest): Observable<ProjectMembership> {

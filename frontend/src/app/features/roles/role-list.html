@@ -1,0 +1,359 @@
+<div class="roles-container">
+  <!-- Header -->
+  <div class="page-header">
+    <div class="header-content">
+      <h1>Role Management</h1>
+      <p>Manage custom roles and their permissions</p>
+    </div>
+    <button
+      class="btn btn-primary"
+      (click)="openCreateModal()"
+      *hasPermission="Permission.UserManageRoles">
+      <i class="fas fa-plus"></i>
+      Create Role
+    </button>
+  </div>
+
+  <!-- Stats Cards -->
+  <div class="stats-row">
+    <div class="stat-card">
+      <div class="stat-icon system">
+        <i class="fas fa-shield-alt"></i>
+      </div>
+      <div class="stat-info">
+        <span class="stat-value">{{ systemRoles() }}</span>
+        <span class="stat-label">System Roles</span>
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon custom">
+        <i class="fas fa-user-tag"></i>
+      </div>
+      <div class="stat-info">
+        <span class="stat-value">{{ customRoles() }}</span>
+        <span class="stat-label">Custom Roles</span>
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon total">
+        <i class="fas fa-users-cog"></i>
+      </div>
+      <div class="stat-info">
+        <span class="stat-value">{{ roles().length }}</span>
+        <span class="stat-label">Total Roles</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Alerts -->
+  @if (error()) {
+    <div class="alert alert-error">
+      <i class="fas fa-exclamation-circle"></i>
+      <span>{{ error() }}</span>
+      <button class="alert-close" (click)="dismissError()">
+        <i class="fas fa-times"></i>
+      </button>
+    </div>
+  }
+
+  @if (successMessage()) {
+    <div class="alert alert-success">
+      <i class="fas fa-check-circle"></i>
+      <span>{{ successMessage() }}</span>
+      <button class="alert-close" (click)="dismissSuccess()">
+        <i class="fas fa-times"></i>
+      </button>
+    </div>
+  }
+
+  <!-- Search -->
+  <div class="search-bar">
+    <i class="fas fa-search"></i>
+    <input
+      type="text"
+      placeholder="Search roles..."
+      [ngModel]="searchQuery()"
+      (ngModelChange)="searchQuery.set($event)"
+    />
+  </div>
+
+  <!-- Loading State -->
+  @if (loading()) {
+    <div class="loading-state">
+      <i class="fas fa-spinner fa-spin"></i>
+      <span>Loading roles...</span>
+    </div>
+  }
+
+  <!-- Roles Table -->
+  @if (!loading()) {
+    <div class="table-container">
+      <table class="roles-table">
+        <thead>
+          <tr>
+            <th>Role Name</th>
+            <th>Description</th>
+            <th>Type</th>
+            <th>Permissions</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (role of filteredRoles(); track role.role_id) {
+            <tr>
+              <td>
+                <div class="role-name">
+                  <i class="fas" [class.fa-shield-alt]="role.is_system_role" [class.fa-user-tag]="!role.is_system_role"></i>
+                  <span>{{ role.name }}</span>
+                </div>
+              </td>
+              <td>
+                <span class="role-description">{{ role.description || 'No description' }}</span>
+              </td>
+              <td>
+                <span class="badge" [class.badge-system]="role.is_system_role" [class.badge-custom]="!role.is_system_role">
+                  {{ role.is_system_role ? 'System' : 'Custom' }}
+                </span>
+              </td>
+              <td>
+                <span class="permission-count">{{ getPermissionCount(role) }} permissions</span>
+              </td>
+              <td>
+                <div class="action-buttons">
+                  <button
+                    class="btn-icon btn-edit"
+                    (click)="openEditModal(role)"
+                    [disabled]="role.is_system_role"
+                    [title]="role.is_system_role ? 'System roles cannot be edited' : 'Edit role'"
+                    *hasPermission="Permission.UserManageRoles">
+                    <i class="fas fa-edit"></i>
+                  </button>
+                  <button
+                    class="btn-icon btn-delete"
+                    (click)="openDeleteModal(role)"
+                    [disabled]="role.is_system_role"
+                    [title]="role.is_system_role ? 'System roles cannot be deleted' : 'Delete role'"
+                    *hasPermission="Permission.UserManageRoles">
+                    <i class="fas fa-trash"></i>
+                  </button>
+                </div>
+              </td>
+            </tr>
+          } @empty {
+            <tr>
+              <td colspan="5" class="empty-state">
+                <i class="fas fa-folder-open"></i>
+                <p>No roles found</p>
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  }
+</div>
+
+<!-- Create Role Modal -->
+@if (showCreateModal()) {
+  <div class="modal-backdrop" (click)="closeCreateModal()">
+    <div class="modal" (click)="$event.stopPropagation()">
+      <div class="modal-header">
+        <h2>Create New Role</h2>
+        <button class="btn-close" (click)="closeCreateModal()">
+          <i class="fas fa-times"></i>
+        </button>
+      </div>
+      <div class="modal-body">
+        <form [formGroup]="createForm">
+          <div class="form-group">
+            <label for="create-name">Role Name *</label>
+            <input
+              type="text"
+              id="create-name"
+              formControlName="name"
+              placeholder="Enter role name"
+            />
+            @if (createForm.controls.name.touched && createForm.controls.name.errors) {
+              <span class="error-text">Role name is required (2-50 characters)</span>
+            }
+          </div>
+          <div class="form-group">
+            <label for="create-description">Description</label>
+            <textarea
+              id="create-description"
+              formControlName="description"
+              placeholder="Enter role description"
+              rows="2"
+            ></textarea>
+          </div>
+
+          <!-- Permission Selection -->
+          <div class="permissions-section">
+            <h3>Permissions</h3>
+            <p class="permissions-hint">Select the permissions this role should have</p>
+
+            @for (group of permissionGroups; track group.name) {
+              <div class="permission-group">
+                <div class="group-header" (click)="toggleGroup(group)">
+                  <div class="group-checkbox">
+                    <input
+                      type="checkbox"
+                      [checked]="isGroupFullySelected(group)"
+                      [indeterminate]="isGroupPartiallySelected(group)"
+                      (click)="$event.stopPropagation()"
+                      (change)="toggleGroup(group)"
+                    />
+                    <span class="group-name">{{ group.name }}</span>
+                  </div>
+                </div>
+                <div class="group-permissions">
+                  @for (perm of group.permissions; track perm.value) {
+                    <label class="permission-item">
+                      <input
+                        type="checkbox"
+                        [checked]="isPermissionSelected(perm.value)"
+                        (change)="togglePermission(perm.value)"
+                      />
+                      <span>{{ perm.label }}</span>
+                    </label>
+                  }
+                </div>
+              </div>
+            }
+          </div>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" (click)="closeCreateModal()">Cancel</button>
+        <button
+          class="btn btn-primary"
+          (click)="submitCreate()"
+          [disabled]="createForm.invalid || loading()">
+          @if (loading()) {
+            <i class="fas fa-spinner fa-spin"></i>
+          }
+          Create Role
+        </button>
+      </div>
+    </div>
+  </div>
+}
+
+<!-- Edit Role Modal -->
+@if (showEditModal()) {
+  <div class="modal-backdrop" (click)="closeEditModal()">
+    <div class="modal" (click)="$event.stopPropagation()">
+      <div class="modal-header">
+        <h2>Edit Role</h2>
+        <button class="btn-close" (click)="closeEditModal()">
+          <i class="fas fa-times"></i>
+        </button>
+      </div>
+      <div class="modal-body">
+        <form [formGroup]="editForm">
+          <div class="form-group">
+            <label for="edit-name">Role Name *</label>
+            <input
+              type="text"
+              id="edit-name"
+              formControlName="name"
+              placeholder="Enter role name"
+            />
+            @if (editForm.controls.name.touched && editForm.controls.name.errors) {
+              <span class="error-text">Role name is required (2-50 characters)</span>
+            }
+          </div>
+          <div class="form-group">
+            <label for="edit-description">Description</label>
+            <textarea
+              id="edit-description"
+              formControlName="description"
+              placeholder="Enter role description"
+              rows="2"
+            ></textarea>
+          </div>
+
+          <!-- Permission Selection -->
+          <div class="permissions-section">
+            <h3>Permissions</h3>
+            <p class="permissions-hint">Select the permissions this role should have</p>
+
+            @for (group of permissionGroups; track group.name) {
+              <div class="permission-group">
+                <div class="group-header" (click)="toggleGroup(group)">
+                  <div class="group-checkbox">
+                    <input
+                      type="checkbox"
+                      [checked]="isGroupFullySelected(group)"
+                      [indeterminate]="isGroupPartiallySelected(group)"
+                      (click)="$event.stopPropagation()"
+                      (change)="toggleGroup(group)"
+                    />
+                    <span class="group-name">{{ group.name }}</span>
+                  </div>
+                </div>
+                <div class="group-permissions">
+                  @for (perm of group.permissions; track perm.value) {
+                    <label class="permission-item">
+                      <input
+                        type="checkbox"
+                        [checked]="isPermissionSelected(perm.value)"
+                        (change)="togglePermission(perm.value)"
+                      />
+                      <span>{{ perm.label }}</span>
+                    </label>
+                  }
+                </div>
+              </div>
+            }
+          </div>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" (click)="closeEditModal()">Cancel</button>
+        <button
+          class="btn btn-primary"
+          (click)="submitEdit()"
+          [disabled]="editForm.invalid || loading()">
+          @if (loading()) {
+            <i class="fas fa-spinner fa-spin"></i>
+          }
+          Save Changes
+        </button>
+      </div>
+    </div>
+  </div>
+}
+
+<!-- Delete Confirmation Modal -->
+@if (showDeleteModal()) {
+  <div class="modal-backdrop" (click)="closeDeleteModal()">
+    <div class="modal modal-small" (click)="$event.stopPropagation()">
+      <div class="modal-header">
+        <h2>Delete Role</h2>
+        <button class="btn-close" (click)="closeDeleteModal()">
+          <i class="fas fa-times"></i>
+        </button>
+      </div>
+      <div class="modal-body">
+        <div class="delete-warning">
+          <i class="fas fa-exclamation-triangle"></i>
+          <p>Are you sure you want to delete the role <strong>{{ selectedRole()?.name }}</strong>?</p>
+          <p class="warning-text">This action cannot be undone. Users assigned to this role will lose their permissions.</p>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" (click)="closeDeleteModal()">Cancel</button>
+        <button
+          class="btn btn-danger"
+          (click)="confirmDelete()"
+          [disabled]="loading()">
+          @if (loading()) {
+            <i class="fas fa-spinner fa-spin"></i>
+          }
+          Delete Role
+        </button>
+      </div>
+    </div>
+  </div>
+}

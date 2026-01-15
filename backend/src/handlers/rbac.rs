@@ -389,3 +389,48 @@ pub async fn initialize_system_roles(
 pub struct OptionalProjectQuery {
     pub project_id: Option<String>,
 }
+
+/// Get a specific user's memberships (admin only)
+pub async fn get_user_memberships(
+    rbac_service: web::Data<RbacService>,
+    req: HttpRequest,
+    path: web::Path<String>,
+) -> HttpResponse {
+    let claims = match req.extensions().get::<Claims>() {
+        Some(c) => c.clone(),
+        None => return HttpResponse::Unauthorized().json(serde_json::json!({"error": "Not authenticated"})),
+    };
+
+    // Check permission - admin or user management permission
+    if let Err(e) = check_permission(&rbac_service, &claims.user_id, None, Permission::UserRead).await {
+        return HttpResponse::Forbidden().json(serde_json::json!({"error": e.to_string()}));
+    }
+
+    let user_id = path.into_inner();
+    
+    match rbac_service.get_user_memberships(&user_id).await {
+        Ok(memberships) => {
+            let mut responses = Vec::new();
+            for m in memberships {
+                let role_name = if let Ok(Some(role)) = rbac_service.get_role_by_id(&m.role_id).await {
+                    Some(role.name)
+                } else {
+                    None
+                };
+                responses.push(ProjectMembershipResponse {
+                    membership_id: m.membership_id,
+                    user_id: m.user_id,
+                    project_id: m.project_id,
+                    role_id: m.role_id,
+                    role_name,
+                    created_at: m.created_at.to_string(),
+                });
+            }
+            HttpResponse::Ok().json(responses)
+        }
+        Err(e) => {
+            log::error!("Failed to get user memberships: {}", e);
+            HttpResponse::InternalServerError().json(serde_json::json!({"error": e}))
+        }
+    }
+}

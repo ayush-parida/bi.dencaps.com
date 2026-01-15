@@ -55,9 +55,8 @@ export interface ProjectMembership {
   user_id: string;
   project_id: string;
   role_id: string;
-  tenant_id: string;
-  assigned_at: string;
-  assigned_by: string;
+  role_name?: string;
+  created_at: string;
 }
 
 /**

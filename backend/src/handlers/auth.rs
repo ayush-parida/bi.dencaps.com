@@ -80,7 +80,7 @@ pub async fn login(
             let access_token = match jwt_manager.generate_token(
                 &user.user_id,
                 &user.email,
-                user.role.as_str(),
+                &user.role,
                 &user.tenant_id,
                 false,
             ) {
@@ -95,7 +95,7 @@ pub async fn login(
             let refresh_token = match jwt_manager.generate_token(
                 &user.user_id,
                 &user.email,
-                user.role.as_str(),
+                &user.role,
                 &user.tenant_id,
                 true,
             ) {

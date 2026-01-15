@@ -1,7 +1,7 @@
 use crate::db::DatabaseManager;
 use crate::models::{
     Permission, Role, ProjectMembership, ResolvedPermissions,
-    CreateRoleDto, UpdateRoleDto, AssignRoleDto, UserRole,
+    CreateRoleDto, UpdateRoleDto, AssignRoleDto,
 };
 use mongodb::bson::{doc, DateTime};
 use redis::AsyncCommands;
@@ -44,7 +44,7 @@ impl RbacService {
 
         // Fetch user to check if admin
         let user = self.get_user(user_id).await?;
-        let is_admin = matches!(user.role, UserRole::Admin);
+        let is_admin = user.role == "admin";
 
         let permissions = if is_admin {
             // Admins get all permissions
@@ -103,17 +103,48 @@ impl RbacService {
         Ok(HashSet::new())
     }
 
-    /// Get global permissions based on UserRole enum
-    async fn get_global_permissions(&self, role: &UserRole) -> Result<HashSet<String>, String> {
+    /// Get global permissions based on role string (supports both system and custom roles)
+    async fn get_global_permissions(&self, role: &str) -> Result<HashSet<String>, String> {
+        log::debug!("Getting global permissions for role: '{}'", role);
+        
+        // First check system roles
         let permissions = match role {
-            UserRole::Admin => Permission::all()
-                .iter()
-                .map(|p| p.as_str().to_string())
-                .collect(),
-            UserRole::ProjectOwner => self.get_owner_permissions(),
-            UserRole::ProjectMember => self.get_member_permissions(),
-            UserRole::Viewer => self.get_viewer_permissions(),
+            "admin" => {
+                log::debug!("Matched admin role");
+                Permission::all()
+                    .iter()
+                    .map(|p| p.as_str().to_string())
+                    .collect()
+            },
+            "project_owner" => {
+                log::debug!("Matched project_owner role");
+                self.get_owner_permissions()
+            },
+            "project_member" => {
+                log::debug!("Matched project_member role");
+                self.get_member_permissions()
+            },
+            "viewer" => {
+                log::debug!("Matched viewer role");
+                self.get_viewer_permissions()
+            },
+            custom_role => {
+                log::debug!("Looking up custom role: '{}'", custom_role);
+                // Look up custom role from database by name
+                match self.get_role_by_name(custom_role).await {
+                    Ok(db_role) => {
+                        log::debug!("Found custom role '{}' with {} permissions", db_role.name, db_role.permissions.len());
+                        db_role.permissions.into_iter().collect()
+                    }
+                    Err(e) => {
+                        log::warn!("Custom role '{}' not found: {}. Defaulting to viewer", custom_role, e);
+                        // Default to viewer permissions if role not found
+                        self.get_viewer_permissions()
+                    }
+                }
+            }
         };
+        log::debug!("Returning {} permissions", permissions.len());
         Ok(permissions)
     }
 
@@ -329,13 +360,40 @@ impl RbacService {
         Ok(role)
     }
 
-    /// Get all roles for a tenant
+    /// Get role by name (for looking up custom roles)
+    pub async fn get_role_by_name(&self, name: &str) -> Result<Role, String> {
+        // Normalize the name for comparison (case-insensitive, underscores to spaces)
+        let normalized = name.replace('_', " ").to_lowercase();
+        
+        let role = self.db
+            .roles_collection()
+            .find_one(doc! { 
+                "$expr": {
+                    "$eq": [
+                        { "$toLower": "$name" },
+                        &normalized
+                    ]
+                }
+            })
+            .await
+            .map_err(|e| format!("Failed to get role: {}", e))?;
+
+        role.ok_or_else(|| format!("Role '{}' not found", name))
+    }
+
+    /// Get all roles for a tenant (including system roles)
     pub async fn get_tenant_roles(&self, tenant_id: &str) -> Result<Vec<Role>, String> {
         use futures::TryStreamExt;
 
+        // Get both tenant-specific roles AND system roles
         let cursor = self.db
             .roles_collection()
-            .find(doc! { "tenant_id": tenant_id })
+            .find(doc! { 
+                "$or": [
+                    { "tenant_id": tenant_id },
+                    { "is_system_role": true }
+                ]
+            })
             .await
             .map_err(|e| format!("Failed to get roles: {}", e))?;
 
@@ -353,11 +411,12 @@ impl RbacService {
 
     /// Assign a role to a user for a specific project
     pub async fn assign_role(&self, dto: AssignRoleDto, tenant_id: &str) -> Result<ProjectMembership, String> {
-        // Verify role exists and belongs to tenant
+        // Verify role exists and belongs to tenant (or is a system role)
         let role = self.get_role_by_id(&dto.role_id).await?
             .ok_or("Role not found")?;
 
-        if role.tenant_id != tenant_id {
+        // System roles can be used by any tenant, custom roles must match tenant
+        if !role.is_system_role && role.tenant_id != tenant_id {
             return Err("Role does not belong to this tenant".to_string());
         }
 
@@ -603,12 +662,15 @@ impl RbacService {
     // ========================================================================
 
     async fn get_user(&self, user_id: &str) -> Result<crate::models::User, String> {
-        self.db
+        let user = self.db
             .users_collection()
             .find_one(doc! { "user_id": user_id })
             .await
             .map_err(|e| format!("Failed to get user: {}", e))?
-            .ok_or_else(|| "User not found".to_string())
+            .ok_or_else(|| "User not found".to_string())?;
+        
+        log::debug!("get_user returned user_id: {}, role: '{}'", user.user_id, user.role);
+        Ok(user)
     }
 
     async fn get_project(&self, project_id: &str) -> Result<Option<crate::models::Project>, String> {
@@ -722,5 +784,100 @@ impl RbacService {
         let _: Result<(), _> = redis
             .del::<_, ()>(role_pattern)
             .await;
+    }
+
+    // ========================================================================
+    // System Role Seeding
+    // ========================================================================
+
+    /// Ensure system roles exist in the database
+    /// This should be called on application startup
+    pub async fn ensure_system_roles(&self) -> Result<(), String> {
+        let system_roles = vec![
+            (
+                "sys-admin-role",
+                "Administrator",
+                "Full system access with all permissions",
+                Permission::all()
+            ),
+            (
+                "sys-project-owner-role",
+                "Project Owner",
+                "Full project access including member management",
+                vec![
+                    Permission::ProjectRead,
+                    Permission::ProjectUpdate,
+                    Permission::ProjectManageMembers,
+                    Permission::UserRead,
+                    Permission::ChatRead,
+                    Permission::ChatWrite,
+                    Permission::ChatDelete,
+                    Permission::ChatExport,
+                    Permission::ReportCreate,
+                    Permission::ReportRead,
+                    Permission::ReportExport,
+                    Permission::ReportDelete,
+                ]
+            ),
+            (
+                "sys-project-member-role",
+                "Project Member",
+                "Standard project access for team members",
+                vec![
+                    Permission::ProjectRead,
+                    Permission::ChatRead,
+                    Permission::ChatWrite,
+                    Permission::ReportCreate,
+                    Permission::ReportRead,
+                ]
+            ),
+            (
+                "sys-viewer-role",
+                "Viewer",
+                "Read-only access to projects and reports",
+                vec![
+                    Permission::ProjectRead,
+                    Permission::ChatRead,
+                    Permission::ReportRead,
+                ]
+            ),
+        ];
+
+        for (role_id, name, description, permissions) in system_roles {
+            // Check if role already exists
+            let existing = self.db
+                .roles_collection()
+                .find_one(doc! { "role_id": role_id })
+                .await
+                .map_err(|e| format!("Failed to check existing role: {}", e))?;
+
+            if existing.is_none() {
+                let now = DateTime::now();
+                let role = Role {
+                    id: None,
+                    role_id: role_id.to_string(),
+                    name: name.to_string(),
+                    description: description.to_string(),
+                    permissions: permissions.iter().map(|p| p.as_str().to_string()).collect(),
+                    is_system_role: true,
+                    tenant_id: "system".to_string(),
+                    created_at: now,
+                    updated_at: now,
+                };
+
+                self.db
+                    .roles_collection()
+                    .insert_one(&role)
+                    .await
+                    .map_err(|e| format!("Failed to insert system role: {}", e))?;
+
+                log::info!("Created system role: {} ({})", name, role_id);
+            } else {
+                log::debug!("System role already exists: {} ({})", name, role_id);
+            }
+        }
+
+        log::info!("System roles verified");
+        Ok(())
     }
 }

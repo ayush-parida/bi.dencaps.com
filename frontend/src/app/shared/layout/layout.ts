@@ -6,6 +6,7 @@ import { Subject, takeUntil, filter, forkJoin } from 'rxjs';
 import { AuthService } from '../../core/services/auth.service';
 import { ProjectService } from '../../core/services/project.service';
 import { ChatService } from '../../core/services/chat.service';
+import { PermissionService } from '../../core/services/permission.service';
 import { Project, ConversationSummary } from '../../core/models';
 import { HasPermissionDirective } from '../directives/permission.directive';
 import { Permission } from '../../core/models/permission.model';
@@ -25,6 +26,7 @@ export class Layout implements OnInit, OnDestroy {
   private readonly authService = inject(AuthService);
   private readonly projectService = inject(ProjectService);
   private readonly chatService = inject(ChatService);
+  private readonly permissionService = inject(PermissionService);
   private readonly router = inject(Router);
   private readonly destroy$ = new Subject<void>();
   
@@ -42,6 +44,8 @@ export class Layout implements OnInit, OnDestroy {
   selectedNewChatProjectId = signal<string>('');
 
   ngOnInit(): void {
+    // Load global permissions first to enable navigation checks
+    this.loadGlobalPermissions();
     this.loadProjects();
     
     // Listen for navigation changes to refresh conversations
@@ -51,6 +55,19 @@ export class Layout implements OnInit, OnDestroy {
     ).subscribe(() => {
       this.loadAllConversations();
     });
+  }
+
+  loadGlobalPermissions(): void {
+    this.permissionService.getMyPermissions()
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: (permissions) => {
+          console.log('Global permissions loaded:', permissions);
+        },
+        error: (err) => {
+          console.error('Failed to load permissions:', err);
+        }
+      });
   }
 
   ngOnDestroy(): void {

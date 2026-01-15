@@ -25,6 +25,16 @@ export class ProjectService {
       .pipe(catchError(this.handleError));
   }
 
+  updateProject(projectId: string, request: Partial<CreateProjectRequest>): Observable<Project> {
+    return this.http.put<Project>(`${environment.apiUrl}/projects/${projectId}`, request)
+      .pipe(catchError(this.handleError));
+  }
+
+  deleteProject(projectId: string): Observable<void> {
+    return this.http.delete<void>(`${environment.apiUrl}/projects/${projectId}`)
+      .pipe(catchError(this.handleError));
+  }
+
   private handleError(error: any): Observable<never> {
     console.error('Project service error:', error);
     return throwError(() => error);

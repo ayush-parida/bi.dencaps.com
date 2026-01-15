@@ -1,7 +1,7 @@
 use mongodb::bson::{doc, DateTime};
 use uuid::Uuid;
 use crate::db::DatabaseManager;
-use crate::models::{User, CreateUserDto, AdminCreateUserDto, UpdateUserDto, UserRole, UserResponse};
+use crate::models::{User, CreateUserDto, AdminCreateUserDto, UpdateUserDto, UserResponse};
 use crate::utils::{hash_password, verify_password};
 
 pub struct UserService {
@@ -34,7 +34,7 @@ impl UserService {
             email: dto.email,
             password_hash,
             name: dto.name,
-            role: UserRole::Viewer,
+            role: "viewer".to_string(),
             tenant_id: dto.tenant_id,
             is_active: true,
             created_at: now,
@@ -70,10 +70,8 @@ impl UserService {
         let password_hash = hash_password(&dto.password)?;
         let now = DateTime::now();
 
-        // Parse role, default to Viewer
-        let role = dto.role
-            .and_then(|r| UserRole::from_str(&r))
-            .unwrap_or(UserRole::Viewer);
+        // Use provided role or default to viewer
+        let role = dto.role.unwrap_or_else(|| "viewer".to_string());
 
         let user = User {
             id: None,
@@ -170,11 +168,8 @@ impl UserService {
             update_doc.insert("name", name);
         }
         if let Some(role_str) = dto.role {
-            if let Some(role) = UserRole::from_str(&role_str) {
-                update_doc.insert("role", role.as_str());
-            } else {
-                return Err(format!("Invalid role: {}", role_str));
-            }
+            // Accept any role string - supports both system and custom roles
+            update_doc.insert("role", role_str);
         }
         if let Some(is_active) = dto.is_active {
             update_doc.insert("is_active", is_active);

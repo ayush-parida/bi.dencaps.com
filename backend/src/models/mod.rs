@@ -289,6 +289,7 @@ impl From<ResolvedPermissions> for UserPermissionsResponse {
 // ============================================================================
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "snake_case")]
 pub enum UserRole {
     Admin,
     ProjectOwner,
@@ -326,7 +327,7 @@ pub struct User {
     pub email: String,
     pub password_hash: String,
     pub name: String,
-    pub role: UserRole,
+    pub role: String,  // String to support both system and custom roles
     pub tenant_id: String,
     pub is_active: bool,
     pub created_at: DateTime,
@@ -461,7 +462,7 @@ impl From<User> for UserResponse {
             user_id: user.user_id.to_string(),
             email: user.email,
             name: user.name,
-            role: user.role.as_str().to_string(),
+            role: user.role.clone(),
             tenant_id: user.tenant_id,
             is_active: user.is_active,
         }

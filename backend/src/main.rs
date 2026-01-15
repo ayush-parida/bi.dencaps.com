@@ -63,6 +63,11 @@ async fn main() -> std::io::Result<()> {
     ));
     let rbac_service = web::Data::new(services::RbacService::new(db_manager.clone()));
 
+    // Ensure system roles exist
+    rbac_service.ensure_system_roles()
+        .await
+        .expect("Failed to seed system roles");
+
     let jwt_manager_data = web::Data::new(jwt_manager.clone());
     let redis = db_manager.redis.clone();
     let cors_origins = config.cors_allowed_origins.clone();
@@ -131,6 +136,8 @@ async fn main() -> std::io::Result<()> {
                             .route("", web::post().to(handlers::project::create_project))
                             .route("", web::get().to(handlers::project::get_user_projects))
                             .route("/{project_id}", web::get().to(handlers::project::get_project_by_id))
+                            .route("/{project_id}", web::put().to(handlers::project::update_project))
+                            .route("/{project_id}", web::delete().to(handlers::project::delete_project))
                             .route("/{project_id}/members", web::get().to(handlers::rbac::get_project_members))
                     )
                     .service(
@@ -158,6 +165,7 @@ async fn main() -> std::io::Result<()> {
                             .route("/roles/{role_id}", web::delete().to(handlers::rbac::delete_role))
                             .route("/memberships", web::post().to(handlers::rbac::assign_role))
                             .route("/memberships/me", web::get().to(handlers::rbac::get_my_memberships))
+                            .route("/memberships/user/{user_id}", web::get().to(handlers::rbac::get_user_memberships))
                             .route("/memberships/{project_id}/{user_id}", web::delete().to(handlers::rbac::revoke_role))
                             .route("/initialize", web::post().to(handlers::rbac::initialize_system_roles))
                     )
