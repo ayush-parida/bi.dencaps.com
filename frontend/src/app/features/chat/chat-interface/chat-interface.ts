@@ -68,6 +68,7 @@ export class ChatInterfaceComponent implements OnInit, OnDestroy {
       if (pid && pid !== this.projectId()) {
         this.projectId.set(pid);
         this.loadProject(pid);
+        this.loadProjectPermissions(pid); // Load permissions when project changes
       }
       
       if (convId && convId !== this.currentConversationId()) {

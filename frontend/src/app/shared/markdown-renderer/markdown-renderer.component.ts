@@ -1,6 +1,7 @@
 import { Component, Input, OnChanges, SimpleChanges, AfterViewChecked, ElementRef, ViewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
+import katex from 'katex';
 
 @Component({
   selector: 'app-markdown-renderer',
@@ -196,6 +197,43 @@ import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
     :host ::ng-deep .markdown-content em {
       font-style: italic;
     }
+
+    /* KaTeX styles for mathematical formulas */
+    :host ::ng-deep .markdown-content .katex-block {
+      display: block;
+      text-align: center;
+      margin: 1rem 0;
+      padding: 1rem;
+      background: #f8f9fa;
+      border-radius: 8px;
+      overflow-x: auto;
+    }
+
+    :host ::ng-deep .markdown-content .katex-inline {
+      display: inline;
+    }
+
+    :host ::ng-deep .markdown-content .katex-error {
+      color: #dc3545;
+      font-family: monospace;
+      padding: 0.25rem 0.5rem;
+      background: #fff3cd;
+      border-radius: 4px;
+    }
+
+    :host ::ng-deep .markdown-content .katex {
+      font-size: 1.1em;
+    }
+
+    :host ::ng-deep .markdown-content .katex-display {
+      margin: 0;
+      padding: 0;
+    }
+
+    :host ::ng-deep .markdown-content .katex-display > .katex {
+      display: inline-block;
+      text-align: center;
+    }
   `]
 })
 export class MarkdownRendererComponent implements OnChanges, AfterViewChecked {
@@ -243,6 +281,78 @@ export class MarkdownRendererComponent implements OnChanges, AfterViewChecked {
 
     // Simple markdown parsing without external dependencies
     let html = this.content;
+    
+    // Process LaTeX formulas BEFORE escaping HTML
+    // Store rendered LaTeX blocks to restore later
+    const latexBlocks: string[] = [];
+    const latexInline: string[] = [];
+    
+    // Block LaTeX: \[...\] or $$...$$
+    html = html.replace(/\\\[([\s\S]*?)\\\]/g, (_, latex) => {
+      try {
+        const rendered = katex.renderToString(latex.trim(), {
+          displayMode: true,
+          throwOnError: false,
+          output: 'html'
+        });
+        latexBlocks.push(`<div class="katex-block">${rendered}</div>`);
+        return `%%LATEXBLOCK${latexBlocks.length - 1}%%`;
+      } catch (e) {
+        latexBlocks.push(`<div class="katex-error">${latex}</div>`);
+        return `%%LATEXBLOCK${latexBlocks.length - 1}%%`;
+      }
+    });
+    
+    html = html.replace(/\$\$([\s\S]*?)\$\$/g, (_, latex) => {
+      try {
+        const rendered = katex.renderToString(latex.trim(), {
+          displayMode: true,
+          throwOnError: false,
+          output: 'html'
+        });
+        latexBlocks.push(`<div class="katex-block">${rendered}</div>`);
+        return `%%LATEXBLOCK${latexBlocks.length - 1}%%`;
+      } catch (e) {
+        latexBlocks.push(`<div class="katex-error">${latex}</div>`);
+        return `%%LATEXBLOCK${latexBlocks.length - 1}%%`;
+      }
+    });
+    
+    // Inline LaTeX: \(...\) or $...$
+    html = html.replace(/\\\(([\s\S]*?)\\\)/g, (_, latex) => {
+      try {
+        const rendered = katex.renderToString(latex.trim(), {
+          displayMode: false,
+          throwOnError: false,
+          output: 'html'
+        });
+        latexInline.push(`<span class="katex-inline">${rendered}</span>`);
+        return `%%LATEXINLINE${latexInline.length - 1}%%`;
+      } catch (e) {
+        latexInline.push(`<span class="katex-error">${latex}</span>`);
+        return `%%LATEXINLINE${latexInline.length - 1}%%`;
+      }
+    });
+    
+    // Single $ for inline math (be careful not to match currency like $100)
+    html = html.replace(/\$([^\$\n]+?)\$/g, (match, latex) => {
+      // Skip if it looks like currency ($ followed by numbers)
+      if (/^\d/.test(latex.trim())) {
+        return match;
+      }
+      try {
+        const rendered = katex.renderToString(latex.trim(), {
+          displayMode: false,
+          throwOnError: false,
+          output: 'html'
+        });
+        latexInline.push(`<span class="katex-inline">${rendered}</span>`);
+        return `%%LATEXINLINE${latexInline.length - 1}%%`;
+      } catch (e) {
+        latexInline.push(`<span class="katex-error">${latex}</span>`);
+        return `%%LATEXINLINE${latexInline.length - 1}%%`;
+      }
+    });
     
     // Escape HTML first (but preserve < and > in code blocks later)
     html = html.replace(/&/g, '&amp;');
@@ -317,6 +427,16 @@ export class MarkdownRendererComponent implements OnChanges, AfterViewChecked {
     // Restore code blocks
     codeBlocks.forEach((block, index) => {
       html = html.replace(`%%CODEBLOCK${index}%%`, block);
+    });
+    
+    // Restore LaTeX blocks
+    latexBlocks.forEach((block, index) => {
+      html = html.replace(`%%LATEXBLOCK${index}%%`, block);
+    });
+    
+    // Restore inline LaTeX
+    latexInline.forEach((inline, index) => {
+      html = html.replace(`%%LATEXINLINE${index}%%`, inline);
     });
 
     // Convert escaped <br> back to actual <br> tags
