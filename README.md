@@ -107,7 +107,7 @@ RATE_LIMIT_REQUESTS=100
 RATE_LIMIT_WINDOW_SECS=60
 
 # CORS Configuration
-CORS_ALLOWED_ORIGINS=http://localhost:4200
+CORS_ALLOWED_ORIGINS=http://localhost:4202
 
 # Logging
 RUST_LOG=info
@@ -138,7 +138,7 @@ npm install
 npm start
 ```
 
-The frontend will be available at `http://localhost:4200`
+The frontend will be available at `http://localhost:4202`
 
 ## API Endpoints
 

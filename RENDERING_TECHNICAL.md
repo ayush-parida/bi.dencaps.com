@@ -426,7 +426,7 @@ Use the demo component at `/demo/rendering` to visually test all content types:
 ```bash
 cd frontend
 npm start
-# Navigate to http://localhost:4200/demo/rendering
+# Navigate to http://localhost:4202/demo/rendering
 ```
 
 ## API Reference

@@ -81,7 +81,7 @@ impl Config {
             .map_err(|_| "Invalid CHAT_CONTEXT_MESSAGE_LIMIT")?;
 
         let cors_allowed_origins = env::var("CORS_ALLOWED_ORIGINS")
-            .unwrap_or_else(|_| "http://localhost:4200".to_string())
+            .unwrap_or_else(|_| "http://localhost:4202".to_string())
             .split(',')
             .map(|s| s.trim().to_string())
             .collect();

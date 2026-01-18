@@ -1,0 +1,1 @@
+pkill -f dencapsbi-backend 2>/dev/null; cd /Users/ayush/Desktop/FGS/bi.dencaps.com/backend && cargo run 2>&1

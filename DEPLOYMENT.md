@@ -73,7 +73,7 @@ npm install
 
 # Development
 npm start
-# Access at http://localhost:4200
+# Access at http://localhost:4202
 
 # Production build
 npm run build

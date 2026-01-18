@@ -166,6 +166,8 @@ impl AIService {
             temperature: 0.7,
             max_tokens: 2000,
         };
+        let request_url = format!("{}/v1/chat/completions", self.api_url);
+        println!("Request URL: {}", request_url);
 
         let response = self
             .client
