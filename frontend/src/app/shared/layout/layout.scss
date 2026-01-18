@@ -345,6 +345,30 @@
         color: rgba(255, 255, 255, 0.4);
       }
     }
+
+    .chat-delete-btn {
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 0.25rem;
+      background: transparent;
+      border: none;
+      border-radius: 4px;
+      color: rgba(255, 255, 255, 0.5);
+      cursor: pointer;
+      transition: all 0.15s ease;
+      margin-left: auto;
+      flex-shrink: 0;
+
+      &:hover {
+        background: rgba(239, 68, 68, 0.2);
+        color: #ef4444;
+      }
+    }
+
+    &:hover .chat-delete-btn {
+      display: flex;
+    }
   }
 }
 

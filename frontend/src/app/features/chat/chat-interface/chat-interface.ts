@@ -3,7 +3,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 import { Subject, takeUntil } from 'rxjs';
-import { ChatService } from '../../../core/services/chat.service';
+import { ChatService, StreamingChatResponse } from '../../../core/services/chat.service';
 import { ProjectService } from '../../../core/services/project.service';
 import { PermissionService } from '../../../core/services/permission.service';
 import { ChatMessage, Project, Permission } from '../../../core/models';
@@ -52,6 +52,8 @@ export class ChatInterfaceComponent implements OnInit, OnDestroy {
   messageInput = '';
   isLoading = signal<boolean>(false);
   isSending = signal<boolean>(false);
+  isStreaming = signal<boolean>(false);
+  streamingContent = signal<string>('');
   error = signal<string | null>(null);
 
   ngOnInit(): void {
@@ -201,36 +203,59 @@ export class ChatInterfaceComponent implements OnInit, OnDestroy {
     this.messages.update(msgs => [...msgs, userMessage]);
     this.messageInput = '';
 
-    this.chatService.sendMessage({
+    // Add placeholder for streaming assistant response
+    const streamingMessage: ChatMessage = {
+      role: 'assistant',
+      content: '',
+      timestamp: new Date().toISOString()
+    };
+    this.messages.update(msgs => [...msgs, streamingMessage]);
+    this.isStreaming.set(true);
+
+    this.chatService.sendMessageStream({
       message,
       project_id: pid,
       conversation_id: this.currentConversationId() || undefined
     }).pipe(takeUntil(this.destroy$))
       .subscribe({
-        next: (response) => {
+        next: (response: StreamingChatResponse) => {
           // Update conversation ID if it's a new conversation
-          if (!this.currentConversationId()) {
-            this.currentConversationId.set(response.conversation_id);
+          if (response.conversationId && !this.currentConversationId()) {
+            this.currentConversationId.set(response.conversationId);
             // Update URL with new conversation ID
             this.router.navigate([], {
               queryParams: { 
                 projectId: pid, 
-                conversationId: response.conversation_id 
+                conversationId: response.conversationId 
               },
               queryParamsHandling: 'merge'
             });
           }
 
-          // Add AI response to messages
-          this.messages.update(msgs => [...msgs, response.message]);
-          this.isSending.set(false);
+          // Update the streaming message content
+          this.messages.update(msgs => {
+            const updated = [...msgs];
+            const lastMsg = updated[updated.length - 1];
+            if (lastMsg && lastMsg.role === 'assistant') {
+              lastMsg.content = response.content;
+            }
+            return updated;
+          });
+          this.streamingContent.set(response.content);
         },
         error: (err) => {
-          // Remove the optimistically added user message on error
-          this.messages.update(msgs => msgs.slice(0, -1));
+          // Remove the placeholder messages on error
+          this.messages.update(msgs => msgs.slice(0, -2));
           this.messageInput = message; // Restore the message
           this.error.set(err.message);
           this.isSending.set(false);
+          this.isStreaming.set(false);
+          this.streamingContent.set('');
+        },
+        complete: () => {
+          this.isSending.set(false);
+          this.isStreaming.set(false);
+          this.streamingContent.set('');
         }
       });
   }

@@ -144,6 +144,41 @@ impl ChatService {
         Ok(conversation)
     }
 
+    pub async fn delete_conversation(
+        &self,
+        conversation_id: &Uuid,
+        user_id: &Uuid,
+    ) -> Result<bool, String> {
+        let collection = self.db_manager.conversations_collection();
+        let filter = doc! {
+            "conversation_id": conversation_id.to_string(),
+            "user_id": user_id.to_string(),
+        };
+
+        let result = collection
+            .delete_one(filter)
+            .await
+            .map_err(|e| format!("Database error: {}", e))?;
+
+        // Remove from cache
+        if result.deleted_count > 0 {
+            self.remove_cached_conversation(conversation_id).await.ok();
+        }
+
+        Ok(result.deleted_count > 0)
+    }
+
+    async fn remove_cached_conversation(&self, conversation_id: &Uuid) -> Result<(), String> {
+        let mut redis = self.db_manager.redis.as_ref().clone();
+
+        let key = format!("conversation:{}", conversation_id);
+        let _: () = redis.del(&key)
+            .await
+            .map_err(|e| format!("Redis error: {}", e))?;
+
+        Ok(())
+    }
+
     pub async fn get_project_conversations(
         &self,
         project_id: &Uuid,
@@ -306,5 +341,97 @@ impl ChatService {
         }
 
         Ok(true)
+    }
+
+    /// Stream a chat message response
+    /// Returns the streaming response from the AI service along with conversation tracking
+    pub async fn stream_message(
+        &self,
+        user_id: uuid::Uuid,
+        project_id: uuid::Uuid,
+        message: String,
+        conversation_id: Option<uuid::Uuid>,
+    ) -> Result<(String, std::pin::Pin<Box<dyn futures::Stream<Item = Result<bytes::Bytes, reqwest::Error>> + Send>>), String> {
+        use mongodb::bson::DateTime as BsonDateTime;
+        
+        // Get or create conversation
+        let conv_id = conversation_id.unwrap_or_else(uuid::Uuid::new_v4);
+        
+        let mut conversation = if conversation_id.is_some() {
+            // Fetch existing conversation
+            match self.get_conversation(&conv_id, &user_id).await? {
+                Some(conv) => conv,
+                None => return Err("Conversation not found".to_string()),
+            }
+        } else {
+            // Create new conversation
+            let title = if message.len() > 50 {
+                format!("{}...", &message[..47])
+            } else {
+                message.clone()
+            };
+
+            Conversation {
+                id: None,
+                conversation_id: conv_id,
+                project_id,
+                user_id,
+                title,
+                messages: vec![],
+                created_at: BsonDateTime::now(),
+                updated_at: BsonDateTime::now(),
+            }
+        };
+
+        // Add user message
+        let user_message = ChatMessage {
+            role: "user".to_string(),
+            content: message.clone(),
+            timestamp: BsonDateTime::now(),
+        };
+        conversation.messages.push(user_message);
+
+        // Build context from conversation history
+        let context = self.build_context(&conversation.messages);
+
+        // Save conversation with user message (AI response will be added later via separate call)
+        conversation.updated_at = BsonDateTime::now();
+        self.save_conversation(&conversation).await?;
+
+        // Get streaming response from AI
+        let stream = self.ai_service
+            .stream_chat_message(&message, context.as_deref())
+            .await?;
+
+        Ok((conv_id.to_string(), stream))
+    }
+
+    /// Append an assistant message to an existing conversation
+    /// Called after streaming is complete to save the full response
+    pub async fn append_assistant_message(
+        &self,
+        conversation_id: &uuid::Uuid,
+        user_id: &uuid::Uuid,
+        content: String,
+    ) -> Result<(), String> {
+        use mongodb::bson::DateTime as BsonDateTime;
+        
+        let mut conversation = match self.get_conversation(conversation_id, user_id).await? {
+            Some(conv) => conv,
+            None => return Err("Conversation not found".to_string()),
+        };
+
+        let ai_message = ChatMessage {
+            role: "assistant".to_string(),
+            content,
+            timestamp: BsonDateTime::now(),
+        };
+        conversation.messages.push(ai_message);
+        conversation.updated_at = BsonDateTime::now();
+
+        self.save_conversation(&conversation).await?;
+        self.cache_conversation(&conversation).await.ok();
+
+        Ok(())
     }
 }

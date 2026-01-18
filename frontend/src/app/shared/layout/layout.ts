@@ -38,10 +38,6 @@ export class Layout implements OnInit, OnDestroy {
   allConversations = signal<ConversationWithProject[]>([]);
   selectedConversationId = signal<string | null>(null);
   loadingConversations = signal<boolean>(false);
-  
-  // New chat project selection
-  showProjectSelector = signal<boolean>(false);
-  selectedNewChatProjectId = signal<string>('');
 
   ngOnInit(): void {
     // Load global permissions first to enable navigation checks
@@ -147,24 +143,33 @@ export class Layout implements OnInit, OnDestroy {
     });
   }
 
-  startNewChat(): void {
-    this.showProjectSelector.set(true);
-  }
+  deleteConversation(conv: ConversationWithProject, event: Event): void {
+    event.stopPropagation(); // Prevent selecting the conversation
+    
+    if (!confirm('Are you sure you want to delete this conversation?')) {
+      return;
+    }
 
-  toggleProjectSelector(): void {
-    this.showProjectSelector.set(!this.showProjectSelector());
-  }
-
-  selectProjectForNewChat(projectId: string): void {
-    this.selectedNewChatProjectId.set(projectId);
-    this.showProjectSelector.set(false);
-    this.selectedConversationId.set(null);
-    this.router.navigate(['/chat'], { queryParams: { projectId } });
-  }
-
-  cancelProjectSelection(): void {
-    this.showProjectSelector.set(false);
-    this.selectedNewChatProjectId.set('');
+    this.chatService.deleteConversation(conv.conversation_id)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: () => {
+          // Remove from local list
+          this.allConversations.update(convs => 
+            convs.filter(c => c.conversation_id !== conv.conversation_id)
+          );
+          
+          // If this was the selected conversation, navigate away
+          if (this.selectedConversationId() === conv.conversation_id) {
+            this.selectedConversationId.set(null);
+            this.router.navigate(['/chat']);
+          }
+        },
+        error: (err) => {
+          console.error('Failed to delete conversation:', err);
+          alert('Failed to delete conversation: ' + err.message);
+        }
+      });
   }
 
   formatDate(dateInput: string | { $date: string } | any): string {

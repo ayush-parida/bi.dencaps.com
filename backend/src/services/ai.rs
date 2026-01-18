@@ -2,6 +2,9 @@ use reqwest::Client;
 use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION, CONTENT_TYPE};
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
+use std::pin::Pin;
+use futures::Stream;
+use bytes::Bytes;
 use crate::config::AIProvider;
 use crate::models::StructuredResponse;
 
@@ -240,6 +243,71 @@ impl AIService {
             .map_err(|e| format!("Failed to parse {} response: {}", self.provider_name(), e))?;
 
         Ok(rag_response.message.content)
+    }
+
+    /// Send streaming request to Custom RAG API
+    /// Returns a stream of bytes from the SSE response
+    pub async fn send_rag_stream_request(
+        &self,
+        query: &str,
+        session_id: Option<String>,
+        top_k: Option<i32>,
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<Bytes, reqwest::Error>> + Send>>, String> {
+        let request = CustomRAGRequest {
+            message: query.to_string(),
+            session_id,
+            top_k: top_k.or(Some(3)),
+            temperature: 0.7,
+            max_tokens: 2048,
+        };
+
+        let url = format!("{}/api/v1/chat/stream", self.api_url);
+        let mut headers = HeaderMap::new();
+        headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
+
+        // Add X-API-Key header for Custom RAG
+        if let Some(ref api_key) = self.api_key {
+            headers.insert(
+                reqwest::header::HeaderName::from_static("x-api-key"),
+                HeaderValue::from_str(api_key)
+                    .map_err(|e| format!("Invalid API key format: {}", e))?
+            );
+        }
+
+        println!("Sending streaming request to: {}", url);
+
+        let response = self.client
+            .post(&url)
+            .headers(headers)
+            .json(&request)
+            .send()
+            .await
+            .map_err(|e| format!("Failed to send streaming request to {}: {}", self.provider_name(), e))?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
+            return Err(format!("{} API error ({}): {}", self.provider_name(), status, error_text));
+        }
+
+        Ok(Box::pin(response.bytes_stream()))
+    }
+
+    /// Stream chat message for Custom RAG API
+    /// Combines messages into a query and returns a streaming response
+    pub async fn stream_chat_message(
+        &self,
+        message: &str,
+        context: Option<&str>,
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<Bytes, reqwest::Error>> + Send>>, String> {
+        // Build the full query with context
+        let full_query = if let Some(ctx) = context {
+            format!("Context:\n{}\n\nQuery: {}", ctx, message)
+        } else {
+            message.to_string()
+        };
+
+        self.send_rag_stream_request(&full_query, None, Some(5)).await
     }
 
     // ========================================================================
