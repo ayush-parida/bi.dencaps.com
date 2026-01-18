@@ -300,11 +300,67 @@ impl AIService {
         message: &str,
         context: Option<&str>,
     ) -> Result<Pin<Box<dyn Stream<Item = Result<Bytes, reqwest::Error>> + Send>>, String> {
-        // Build the full query with context
-        let full_query = if let Some(ctx) = context {
-            format!("Context:\n{}\n\nQuery: {}", ctx, message)
-        } else {
-            message.to_string()
+        // Chart instruction for rendering visual charts
+        let chart_instruction = r#"
+IMPORTANT: When the user asks for a chart or visualization, you MUST output the data in a JSON code block.
+
+Supported chart types: pie, bar, line, doughnut
+
+Use this EXACT format inside a ```json code block:
+{
+  "type": "pie",
+  "title": "Chart Title",
+  "labels": ["Category A", "Category B", "Category C"],
+  "data": [100, 200, 300]
+}
+
+Examples:
+
+For a PIE CHART showing tax vs take-home:
+```json
+{"type": "pie", "title": "Income Distribution", "labels": ["Tax Payable", "Take-Home Salary"], "data": [351000, 1649000]}
+```
+
+For a BAR CHART showing tax by slab:
+```json
+{"type": "bar", "title": "Tax by Income Slab", "labels": ["0-2.5L", "2.5L-5L", "5L-10L", "10L-20L"], "data": [0, 12500, 100000, 300000]}
+```
+
+For a LINE CHART showing trends:
+```json
+{"type": "line", "title": "Monthly Trend", "labels": ["Jan", "Feb", "Mar"], "data": [100, 150, 200]}
+```
+
+For a DOUGHNUT CHART:
+```json
+{"type": "doughnut", "title": "Expense Breakdown", "labels": ["Rent", "Food", "Transport"], "data": [500, 200, 100]}
+```
+
+ALWAYS use the correct "type" field based on what the user asks for:
+- "bar chart" or "bar graph" → type: "bar"
+- "pie chart" or "pie graph" → type: "pie"
+- "line chart" or "line graph" or "trend" → type: "line"
+- "doughnut" or "donut" → type: "doughnut"
+- Default to "pie" if no specific type is mentioned
+"#;
+
+        // Check if user is asking for a chart
+        let message_lower = message.to_lowercase();
+        let wants_chart = message_lower.contains("chart") 
+            || message_lower.contains("pie") 
+            || message_lower.contains("bar")
+            || message_lower.contains("line graph")
+            || message_lower.contains("visualiz")
+            || message_lower.contains("graph")
+            || message_lower.contains("doughnut")
+            || message_lower.contains("donut");
+
+        // Build the full query with context and chart instructions
+        let full_query = match (context, wants_chart) {
+            (Some(ctx), true) => format!("{}\n\nContext:\n{}\n\nQuery: {}", chart_instruction, ctx, message),
+            (Some(ctx), false) => format!("Context:\n{}\n\nQuery: {}", ctx, message),
+            (None, true) => format!("{}\n\nQuery: {}", chart_instruction, message),
+            (None, false) => message.to_string(),
         };
 
         self.send_rag_stream_request(&full_query, None, Some(5)).await

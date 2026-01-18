@@ -38,6 +38,13 @@ pub struct SaveStreamedResponseDto {
     pub content: String,
 }
 
+/// Request DTO for regenerating a response
+#[derive(Debug, Deserialize, Validate)]
+pub struct RegenerateMessageDto {
+    pub conversation_id: String,
+    pub from_index: usize,
+}
+
 pub async fn send_message(
     chat_service: web::Data<ChatService>,
     rbac_service: web::Data<RbacService>,
@@ -611,4 +618,102 @@ pub async fn save_streamed_response(
             })
         }
     }
+}
+
+/// Regenerate a response from a specific message index
+/// This removes messages from the index onwards and regenerates
+pub async fn regenerate_message_stream(
+    chat_service: web::Data<ChatService>,
+    req: HttpRequest,
+    dto: web::Json<RegenerateMessageDto>,
+) -> HttpResponse {
+    // Validate input
+    if let Err(e) = dto.validate() {
+        return HttpResponse::BadRequest().json(ErrorResponse {
+            error: format!("Validation error: {}", e),
+        });
+    }
+
+    // Get user from JWT claims
+    let claims = match req.extensions().get::<Claims>() {
+        Some(c) => c.clone(),
+        None => {
+            return HttpResponse::Unauthorized().json(ErrorResponse {
+                error: "Unauthorized".to_string(),
+            });
+        }
+    };
+
+    // Parse user_id from claims
+    let user_id = match Uuid::parse_str(&claims.user_id) {
+        Ok(id) => id,
+        Err(_) => {
+            return HttpResponse::BadRequest().json(ErrorResponse {
+                error: "Invalid user_id".to_string(),
+            });
+        }
+    };
+
+    // Parse conversation_id
+    let conversation_id = match Uuid::parse_str(&dto.conversation_id) {
+        Ok(id) => id,
+        Err(_) => {
+            return HttpResponse::BadRequest().json(ErrorResponse {
+                error: "Invalid conversation_id format".to_string(),
+            });
+        }
+    };
+
+    // Get streaming response with regeneration
+    let (conv_id, stream) = match chat_service
+        .regenerate_from_index(user_id, conversation_id, dto.from_index)
+        .await
+    {
+        Ok(result) => result,
+        Err(e) => {
+            log::error!("Failed to start regeneration: {}", e);
+            return HttpResponse::InternalServerError().json(ErrorResponse {
+                error: format!("Failed to start regeneration: {}", e),
+            });
+        }
+    };
+
+    // Create the SSE response stream
+    let conv_id_clone = conv_id.clone();
+    let response_stream = async_stream::stream! {
+        // Send conversation_id as first event
+        let init_event = format!("event: init\ndata: {}\n\n", serde_json::json!({
+            "conversation_id": conv_id_clone
+        }));
+        yield Ok::<_, actix_web::error::Error>(web::Bytes::from(init_event));
+
+        // Stream the AI response chunks
+        let mut pinned_stream = stream;
+        while let Some(chunk_result) = pinned_stream.next().await {
+            match chunk_result {
+                Ok(bytes) => {
+                    // Forward the SSE data directly from the RAG API
+                    yield Ok(web::Bytes::from(bytes.to_vec()));
+                }
+                Err(e) => {
+                    log::error!("Stream error: {}", e);
+                    let error_event = format!("event: error\ndata: {}\n\n", serde_json::json!({
+                        "error": e.to_string()
+                    }));
+                    yield Ok(web::Bytes::from(error_event));
+                    break;
+                }
+            }
+        }
+
+        // Send done event
+        let done_event = "event: done\ndata: {}\n\n".to_string();
+        yield Ok(web::Bytes::from(done_event));
+    };
+
+    HttpResponse::Ok()
+        .insert_header((header::CONTENT_TYPE, "text/event-stream"))
+        .insert_header((header::CACHE_CONTROL, "no-cache"))
+        .insert_header(("X-Accel-Buffering", "no"))
+        .streaming(response_stream)
 }

@@ -394,9 +394,10 @@ impl ChatService {
         // Build context from conversation history
         let context = self.build_context(&conversation.messages);
 
-        // Save conversation with user message (AI response will be added later via separate call)
+        // Save conversation with user message and update cache (AI response will be added later via separate call)
         conversation.updated_at = BsonDateTime::now();
         self.save_conversation(&conversation).await?;
+        self.cache_conversation(&conversation).await.ok();
 
         // Get streaming response from AI
         let stream = self.ai_service
@@ -433,5 +434,57 @@ impl ChatService {
         self.cache_conversation(&conversation).await.ok();
 
         Ok(())
+    }
+
+    /// Regenerate a response from a specific message index
+    /// Removes messages from that index onwards and regenerates from the last user message
+    pub async fn regenerate_from_index(
+        &self,
+        user_id: uuid::Uuid,
+        conversation_id: uuid::Uuid,
+        from_index: usize,
+    ) -> Result<(String, std::pin::Pin<Box<dyn futures::Stream<Item = Result<bytes::Bytes, reqwest::Error>> + Send>>), String> {
+        use mongodb::bson::DateTime as BsonDateTime;
+        
+        // Fetch existing conversation
+        let mut conversation = match self.get_conversation(&conversation_id, &user_id).await? {
+            Some(conv) => conv,
+            None => return Err("Conversation not found".to_string()),
+        };
+
+        // Validate index
+        if from_index == 0 || from_index >= conversation.messages.len() {
+            return Err("Invalid message index".to_string());
+        }
+
+        // Find the user message before the specified index
+        let mut user_msg_idx: Option<usize> = None;
+        for i in (0..from_index).rev() {
+            if conversation.messages[i].role == "user" {
+                user_msg_idx = Some(i);
+                break;
+            }
+        }
+
+        let user_idx = user_msg_idx.ok_or("No user message found before the specified index")?;
+        let user_message = conversation.messages[user_idx].content.clone();
+
+        // Truncate messages to include only up to and including the user message
+        conversation.messages.truncate(user_idx + 1);
+        conversation.updated_at = BsonDateTime::now();
+        
+        // Save the truncated conversation and update cache
+        self.save_conversation(&conversation).await?;
+        self.cache_conversation(&conversation).await.ok();
+
+        // Build context from remaining conversation history
+        let context = self.build_context(&conversation.messages);
+
+        // Get streaming response from AI
+        let stream = self.ai_service
+            .stream_chat_message(&user_message, context.as_deref())
+            .await?;
+
+        Ok((conversation_id.to_string(), stream))
     }
 }

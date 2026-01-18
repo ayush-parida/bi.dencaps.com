@@ -167,7 +167,15 @@ export class ChatInterfaceComponent implements OnInit, OnDestroy {
       .pipe(takeUntil(this.destroy$))
       .subscribe({
         next: (conversation) => {
-          this.messages.set(conversation.messages);
+          // Clean [DONE] markers from loaded messages
+          const cleanedMessages = conversation.messages.map(msg => ({
+            ...msg,
+            content: msg.content
+              .replace(/\[DONE\]/g, '')
+              .replace(/data:\s*\[DONE\]/g, '')
+              .trim()
+          }));
+          this.messages.set(cleanedMessages);
           this.error.set(null);
           this.isLoading.set(false);
         },
@@ -299,9 +307,101 @@ export class ChatInterfaceComponent implements OnInit, OnDestroy {
 
   tryParseStructuredContent(content: string): any {
     try {
-      return JSON.parse(content);
+      const parsed = JSON.parse(content);
+      // Only return if it's a valid structured response (has items array)
+      if (parsed && typeof parsed === 'object' && Array.isArray(parsed.items) && parsed.items.length > 0) {
+        return parsed;
+      }
+      return null;
     } catch {
       return null;
     }
+  }
+
+  /**
+   * Regenerate an AI response at a specific index by resending the preceding user message
+   * Uses the regenerate endpoint which properly truncates and regenerates
+   */
+  regenerateResponse(assistantMsgIndex: number): void {
+    const msgs = this.messages();
+    const convId = this.currentConversationId();
+    
+    if (!convId || assistantMsgIndex <= 0) {
+      this.error.set('Cannot regenerate: No active conversation');
+      return;
+    }
+
+    // Find the user message that preceded this assistant message
+    let userMsgIndex = -1;
+    for (let i = assistantMsgIndex - 1; i >= 0; i--) {
+      if (msgs[i].role === 'user') {
+        userMsgIndex = i;
+        break;
+      }
+    }
+    
+    if (userMsgIndex === -1) {
+      this.error.set('Cannot regenerate: No user message found');
+      return;
+    }
+
+    // Update UI immediately - remove messages from the assistant onwards
+    this.messages.update(msgList => {
+      return msgList.slice(0, userMsgIndex + 1);
+    });
+
+    // Set sending state
+    this.isSending.set(true);
+    this.error.set(null);
+
+    // Add placeholder for streaming assistant response
+    const streamingMessage: ChatMessage = {
+      role: 'assistant',
+      content: '',
+      timestamp: new Date().toISOString()
+    };
+    this.messages.update(msgsList => [...msgsList, streamingMessage]);
+    this.isStreaming.set(true);
+
+    // Use the regenerate endpoint with the original assistant message index
+    this.chatService.regenerateMessageStream(convId, assistantMsgIndex)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: (response: StreamingChatResponse) => {
+          // Update the streaming message content
+          this.messages.update(allMsgs => {
+            const updated = [...allMsgs];
+            const lastMsg = updated[updated.length - 1];
+            if (lastMsg && lastMsg.role === 'assistant') {
+              lastMsg.content = response.content;
+            }
+            return updated;
+          });
+          this.streamingContent.set(response.content);
+        },
+        error: (err) => {
+          // Remove the placeholder on error
+          this.messages.update(allMsgs => allMsgs.slice(0, -1));
+          this.error.set(err.message);
+          this.isSending.set(false);
+          this.isStreaming.set(false);
+          this.streamingContent.set('');
+        },
+        complete: () => {
+          this.isSending.set(false);
+          this.isStreaming.set(false);
+          this.streamingContent.set('');
+        }
+      });
+  }
+
+  /**
+   * Check if the given message can be regenerated (any assistant message when not streaming)
+   */
+  canRegenerateMessage(message: ChatMessage, index: number): boolean {
+    // Show regenerate for any assistant message when not sending
+    return message.role === 'assistant' && 
+           !this.isSending() && 
+           !this.isStreaming();
   }
 }

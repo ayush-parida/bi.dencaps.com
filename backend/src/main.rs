@@ -155,6 +155,7 @@ async fn main() -> std::io::Result<()> {
                             .route("/message", web::post().to(handlers::chat::send_message))
                             .route("/message/stream", web::post().to(handlers::chat::stream_message))
                             .route("/message/stream/save", web::post().to(handlers::chat::save_streamed_response))
+                            .route("/message/regenerate", web::post().to(handlers::chat::regenerate_message_stream))
                             .route("/conversations/{conversation_id}", web::get().to(handlers::chat::get_conversation))
                             .route("/conversations/{conversation_id}", web::delete().to(handlers::chat::delete_conversation))
                             .route("/projects/{project_id}/conversations", web::get().to(handlers::chat::get_project_conversations))

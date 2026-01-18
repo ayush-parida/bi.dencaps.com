@@ -2,6 +2,18 @@ import { Component, Input, OnChanges, SimpleChanges, AfterViewChecked, ElementRe
 import { CommonModule } from '@angular/common';
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 import katex from 'katex';
+import { Chart, ChartConfiguration, registerables } from 'chart.js';
+
+// Register Chart.js components
+Chart.register(...registerables);
+
+interface ChartData {
+  type: 'pie' | 'bar' | 'line' | 'doughnut';
+  title?: string;
+  labels: string[];
+  data: number[];
+  colors?: string[];
+}
 
 @Component({
   selector: 'app-markdown-renderer',
@@ -234,6 +246,29 @@ import katex from 'katex';
       display: inline-block;
       text-align: center;
     }
+
+    /* Chart container styles */
+    :host ::ng-deep .markdown-content .chart-container {
+      margin: 1.5rem 0;
+      padding: 1.5rem;
+      background: #fff;
+      border-radius: 12px;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+      border: 1px solid #e1e8ed;
+    }
+
+    :host ::ng-deep .markdown-content .chart-container .chart-title {
+      text-align: center;
+      font-size: 1.1em;
+      font-weight: 600;
+      color: #333;
+      margin-bottom: 1rem;
+    }
+
+    :host ::ng-deep .markdown-content .chart-container canvas {
+      max-width: 100%;
+      max-height: 400px;
+    }
   `]
 })
 export class MarkdownRendererComponent implements OnChanges, AfterViewChecked {
@@ -242,11 +277,18 @@ export class MarkdownRendererComponent implements OnChanges, AfterViewChecked {
   
   renderedContent: SafeHtml = '';
   private needsEventBinding = false;
+  private chartInstances: Chart[] = [];
+  private pendingCharts: { id: string; data: ChartData }[] = [];
 
   constructor(private sanitizer: DomSanitizer) {}
 
   ngOnChanges(changes: SimpleChanges): void {
     if (changes['content']) {
+      // Destroy existing chart instances
+      this.chartInstances.forEach(chart => chart.destroy());
+      this.chartInstances = [];
+      this.pendingCharts = [];
+      
       this.renderMarkdown();
       this.needsEventBinding = true;
     }
@@ -255,7 +297,185 @@ export class MarkdownRendererComponent implements OnChanges, AfterViewChecked {
   ngAfterViewChecked(): void {
     if (this.needsEventBinding && this.markdownContainer) {
       this.bindAccordionEvents();
+      this.renderPendingCharts();
       this.needsEventBinding = false;
+    }
+  }
+
+  private renderPendingCharts(): void {
+    this.pendingCharts.forEach(({ id, data }) => {
+      const canvas = this.markdownContainer.nativeElement.querySelector(`#${id}`) as HTMLCanvasElement;
+      if (canvas) {
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          const isPieOrDoughnut = data.type === 'pie' || data.type === 'doughnut';
+          const isBarOrLine = data.type === 'bar' || data.type === 'line';
+          
+          const config: ChartConfiguration = {
+            type: data.type,
+            data: {
+              labels: data.labels,
+              datasets: [{
+                label: data.title || 'Value',
+                data: data.data,
+                backgroundColor: isPieOrDoughnut 
+                  ? (data.colors || this.getDefaultColors(data.data.length))
+                  : (data.colors?.[0] || '#667eea'),
+                borderColor: isPieOrDoughnut ? '#fff' : (data.colors?.[0] || '#667eea'),
+                borderWidth: isPieOrDoughnut ? 2 : 1,
+                ...(data.type === 'line' && {
+                  fill: false,
+                  tension: 0.3,
+                  pointBackgroundColor: data.colors?.[0] || '#667eea',
+                  pointRadius: 5,
+                  pointHoverRadius: 7
+                })
+              }]
+            },
+            options: {
+              responsive: true,
+              maintainAspectRatio: true,
+              indexAxis: 'x',
+              plugins: {
+                legend: {
+                  display: isPieOrDoughnut,
+                  position: 'right',
+                  labels: {
+                    padding: 15,
+                    usePointStyle: true,
+                    font: { size: 12 }
+                  }
+                },
+                tooltip: {
+                  callbacks: {
+                    label: (context) => {
+                      const value = context.raw as number;
+                      if (isPieOrDoughnut) {
+                        const total = (context.dataset.data as number[]).reduce((a, b) => a + b, 0);
+                        const percentage = ((value / total) * 100).toFixed(1);
+                        return `${context.label}: ₹${value.toLocaleString('en-IN')} (${percentage}%)`;
+                      }
+                      return `${context.label}: ₹${value.toLocaleString('en-IN')}`;
+                    }
+                  }
+                }
+              },
+              ...(isBarOrLine && {
+                scales: {
+                  y: {
+                    beginAtZero: true,
+                    ticks: {
+                      callback: (value) => `₹${Number(value).toLocaleString('en-IN')}`
+                    },
+                    grid: {
+                      color: 'rgba(0, 0, 0, 0.1)'
+                    }
+                  },
+                  x: {
+                    grid: {
+                      display: false
+                    }
+                  }
+                }
+              })
+            }
+          };
+          
+          const chart = new Chart(ctx, config);
+          this.chartInstances.push(chart);
+        }
+      }
+    });
+    this.pendingCharts = [];
+  }
+
+  private getDefaultColors(count: number): string[] {
+    const palette = [
+      '#667eea', '#f093fb', '#4facfe', '#43e97b', '#fa709a',
+      '#fee140', '#30cfd0', '#a8edea', '#ff9a9e', '#ffecd2',
+      '#a18cd1', '#fbc2eb', '#84fab0', '#8fd3f4', '#d299c2'
+    ];
+    return palette.slice(0, count);
+  }
+
+  /**
+   * Try to parse JSON as chart data. Returns HTML string if valid chart data, null otherwise.
+   * Supports multiple formats:
+   * - Direct: {"type":"pie","labels":[],"data":[]}
+   * - With values array: {"type":"pie","labels":[],"values":[]}
+   * - Named data: {"taxPayable":335400,"takeHome":1664600}
+   * - Array format: [{"label":"A","value":10},{"label":"B","value":20}]
+   */
+  private tryParseChartData(jsonStr: string): string | null {
+    try {
+      const parsed = JSON.parse(jsonStr);
+      
+      // Check if it's a valid chart data structure
+      let chartData: ChartData | null = null;
+      
+      if (parsed.type && parsed.labels && (parsed.data || parsed.values)) {
+        // Standard chart format
+        chartData = {
+          type: parsed.type,
+          title: parsed.title,
+          labels: parsed.labels,
+          data: parsed.data || parsed.values,
+          colors: parsed.colors
+        };
+      } else if (Array.isArray(parsed) && parsed.length > 0 && parsed[0].label !== undefined) {
+        // Array format: [{"label":"A","value":10}, ...] or [{"label":"A","value":10,"type":"bar"}]
+        const labels = parsed.map((item: { label: string }) => item.label);
+        const data = parsed.map((item: { value: number }) => item.value);
+        // Check if any item has a type specified
+        const specifiedType = parsed[0].type as 'pie' | 'bar' | 'line' | 'doughnut' | undefined;
+        
+        if (labels.length >= 2) {
+          chartData = {
+            type: specifiedType || 'pie',
+            title: parsed[0].title || 'Distribution',
+            labels,
+            data
+          };
+        }
+      } else if (parsed.taxPayable !== undefined || parsed.tax !== undefined || parsed.takeHome !== undefined) {
+        // Tax breakdown format - auto-convert to pie chart
+        const labels: string[] = [];
+        const data: number[] = [];
+        
+        if (parsed.standardDeduction !== undefined) {
+          labels.push('Standard Deduction');
+          data.push(parsed.standardDeduction);
+        }
+        if (parsed.taxPayable !== undefined || parsed.tax !== undefined) {
+          labels.push('Tax Payable');
+          data.push(parsed.taxPayable || parsed.tax);
+        }
+        if (parsed.takeHome !== undefined || parsed.netIncome !== undefined) {
+          labels.push('Take-home');
+          data.push(parsed.takeHome || parsed.netIncome);
+        }
+        
+        if (labels.length >= 2) {
+          chartData = {
+            type: 'pie',
+            title: parsed.title || 'Income Distribution',
+            labels,
+            data
+          };
+        }
+      }
+      
+      if (chartData && chartData.labels.length > 0 && chartData.data.length > 0) {
+        const chartId = `chart-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+        this.pendingCharts.push({ id: chartId, data: chartData });
+        
+        const titleHtml = chartData.title ? `<div class="chart-title">${chartData.title}</div>` : '';
+        return `<div class="chart-container">${titleHtml}<canvas id="${chartId}"></canvas></div>`;
+      }
+      
+      return null;
+    } catch (e) {
+      return null;
     }
   }
 
@@ -280,7 +500,11 @@ export class MarkdownRendererComponent implements OnChanges, AfterViewChecked {
     }
 
     // Simple markdown parsing without external dependencies
-    let html = this.content;
+    // First, clean any [DONE] markers that may appear in content
+    let html = this.content
+      .replace(/\[DONE\]/g, '')
+      .replace(/data:\s*\[DONE\]/g, '')
+      .trim();
     
     // Process LaTeX formulas BEFORE escaping HTML
     // Store rendered LaTeX blocks to restore later
@@ -357,6 +581,32 @@ export class MarkdownRendererComponent implements OnChanges, AfterViewChecked {
     // Escape HTML first (but preserve < and > in code blocks later)
     html = html.replace(/&/g, '&amp;');
 
+    // Chart blocks - process before code blocks
+    // Format: ```chart\n{"type":"pie","labels":["A","B"],"data":[10,20]}\n```
+    const chartBlocks: string[] = [];
+    html = html.replace(/```chart\n?([\s\S]*?)```/g, (_, chartJson) => {
+      const result = this.tryParseChartData(chartJson.trim());
+      if (result) {
+        chartBlocks.push(result);
+        return `\n%%CHARTBLOCK${chartBlocks.length - 1}%%\n`;
+      }
+      // If JSON parsing fails, treat as regular code block
+      const escaped = chartJson.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      chartBlocks.push(`<pre><code class="language-json">${escaped.trim()}</code></pre>`);
+      return `\n%%CHARTBLOCK${chartBlocks.length - 1}%%\n`;
+    });
+
+    // Also detect JSON code blocks that look like chart data
+    html = html.replace(/```json\n?([\s\S]*?)```/g, (match, jsonContent) => {
+      const result = this.tryParseChartData(jsonContent.trim());
+      if (result) {
+        chartBlocks.push(result);
+        return `\n%%CHARTBLOCK${chartBlocks.length - 1}%%\n`;
+      }
+      // Not chart data, process as regular code block
+      return match;
+    });
+
     // Code blocks (triple backticks) - process first to protect content
     const codeBlocks: string[] = [];
     html = html.replace(/```(\w*)\n?([\s\S]*?)```/g, (_, lang, code) => {
@@ -411,8 +661,8 @@ export class MarkdownRendererComponent implements OnChanges, AfterViewChecked {
     html = html.split('\n\n').map(block => {
       block = block.trim();
       if (!block) return '';
-      // Don't wrap if it's already an HTML element or code block placeholder
-      if (block.match(/^<(h[1-6]|ul|ol|li|pre|blockquote|hr|table)/) || block.match(/^%%CODEBLOCK\d+%%$/)) {
+      // Don't wrap if it's already an HTML element or code/chart block placeholder
+      if (block.match(/^<(h[1-6]|ul|ol|li|pre|blockquote|hr|table)/) || block.match(/^%%(CODEBLOCK|CHARTBLOCK)\d+%%$/)) {
         return block;
       }
       // Replace single newlines with <br>
@@ -423,6 +673,11 @@ export class MarkdownRendererComponent implements OnChanges, AfterViewChecked {
     // Clean up nested paragraph tags
     html = html.replace(/<p><(h[1-6]|ul|ol|pre|blockquote|hr|table)/g, '<$1');
     html = html.replace(/<\/(h[1-6]|ul|ol|pre|blockquote|hr|table)><\/p>/g, '</$1>');
+
+    // Restore chart blocks
+    chartBlocks.forEach((block, index) => {
+      html = html.replace(`%%CHARTBLOCK${index}%%`, block);
+    });
 
     // Restore code blocks
     codeBlocks.forEach((block, index) => {

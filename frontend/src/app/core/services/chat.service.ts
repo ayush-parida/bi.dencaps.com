@@ -62,14 +62,16 @@ export class ChatService {
       let fullContent = '';
 
       const finishStream = () => {
+        // Clean and trim the final content before saving/completing
+        const cleanedContent = this.cleanFinalContent(fullContent);
         // Save the response to the database before completing
-        if (conversationId && fullContent) {
-          this.saveStreamedResponse(conversationId, fullContent).subscribe({
+        if (conversationId && cleanedContent) {
+          this.saveStreamedResponse(conversationId, cleanedContent).subscribe({
             next: () => console.log('Streamed response saved'),
             error: (err) => console.error('Failed to save streamed response:', err)
           });
         }
-        subject.next({ conversationId, content: fullContent, done: true });
+        subject.next({ conversationId, content: cleanedContent, done: true });
         subject.complete();
       };
 
@@ -113,22 +115,34 @@ export class ChatService {
                   subject.error(new Error(parsed.error));
                   return;
                 } else if (parsed.content !== undefined) {
-                  // Accumulate content chunks
-                  fullContent += parsed.content;
-                  subject.next({ conversationId, content: fullContent, done: false });
+                  // Accumulate content chunks, filtering out [DONE] marker
+                  const cleanChunk = this.cleanContent(parsed.content);
+                  if (cleanChunk) {
+                    fullContent += cleanChunk;
+                    subject.next({ conversationId, content: this.cleanContent(fullContent), done: false });
+                  }
                 } else if (parsed.token !== undefined) {
                   // Some APIs send token instead of content
-                  fullContent += parsed.token;
-                  subject.next({ conversationId, content: fullContent, done: false });
+                  const cleanChunk = this.cleanContent(parsed.token);
+                  if (cleanChunk) {
+                    fullContent += cleanChunk;
+                    subject.next({ conversationId, content: this.cleanContent(fullContent), done: false });
+                  }
                 } else if (typeof parsed === 'string') {
-                  fullContent += parsed;
-                  subject.next({ conversationId, content: fullContent, done: false });
+                  const cleanChunk = this.cleanContent(parsed);
+                  if (cleanChunk) {
+                    fullContent += cleanChunk;
+                    subject.next({ conversationId, content: this.cleanContent(fullContent), done: false });
+                  }
                 }
               } catch {
                 // If not JSON, treat as raw content (for RAG API format)
                 if (data && data !== '{}') {
-                  fullContent += data;
-                  subject.next({ conversationId, content: fullContent, done: false });
+                  const cleanChunk = this.cleanContent(data);
+                  if (cleanChunk) {
+                    fullContent += cleanChunk;
+                    subject.next({ conversationId, content: this.cleanContent(fullContent), done: false });
+                  }
                 }
               }
             }
@@ -155,6 +169,129 @@ export class ChatService {
     }).pipe(
       catchError(this.handleError)
     );
+  }
+
+  /**
+   * Regenerate a response from a specific message index
+   * This removes messages from that index onwards and regenerates
+   */
+  regenerateMessageStream(conversationId: string, fromIndex: number): Observable<StreamingChatResponse> {
+    const subject = new Subject<StreamingChatResponse>();
+    
+    const token = localStorage.getItem('access_token');
+    
+    fetch(`${this.baseUrl}/message/regenerate`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify({
+        conversation_id: conversationId,
+        from_index: fromIndex
+      })
+    }).then(async response => {
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+        subject.error(new Error(errorData.error || `HTTP ${response.status}`));
+        return;
+      }
+
+      const reader = response.body?.getReader();
+      if (!reader) {
+        subject.error(new Error('No response body'));
+        return;
+      }
+
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let convId = conversationId;
+      let fullContent = '';
+
+      const finishStream = () => {
+        // Clean and trim the final content
+        const cleanedContent = this.cleanFinalContent(fullContent);
+        // Save the regenerated response
+        if (convId && cleanedContent) {
+          this.saveStreamedResponse(convId, cleanedContent).subscribe({
+            next: () => console.log('Regenerated response saved'),
+            error: (err) => console.error('Failed to save regenerated response:', err)
+          });
+        }
+        subject.next({ conversationId: convId, content: cleanedContent, done: true });
+        subject.complete();
+      };
+
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          
+          if (done) {
+            finishStream();
+            break;
+          }
+
+          buffer += decoder.decode(value, { stream: true });
+          
+          const lines = buffer.split('\n');
+          buffer = lines.pop() || '';
+
+          for (const line of lines) {
+            if (line.startsWith('event: ')) {
+              const eventType = line.substring(7).trim();
+              if (eventType === 'done') {
+                finishStream();
+                return;
+              }
+            } else if (line.startsWith('data: ')) {
+              const data = line.substring(6);
+              try {
+                const parsed = JSON.parse(data);
+                
+                if (parsed.conversation_id) {
+                  convId = parsed.conversation_id;
+                } else if (parsed.error) {
+                  subject.error(new Error(parsed.error));
+                  return;
+                } else if (parsed.content !== undefined) {
+                  const cleanChunk = this.cleanContent(parsed.content);
+                  if (cleanChunk) {
+                    fullContent += cleanChunk;
+                    subject.next({ conversationId: convId, content: this.cleanContent(fullContent), done: false });
+                  }
+                } else if (parsed.token !== undefined) {
+                  const cleanChunk = this.cleanContent(parsed.token);
+                  if (cleanChunk) {
+                    fullContent += cleanChunk;
+                    subject.next({ conversationId: convId, content: this.cleanContent(fullContent), done: false });
+                  }
+                } else if (typeof parsed === 'string') {
+                  const cleanChunk = this.cleanContent(parsed);
+                  if (cleanChunk) {
+                    fullContent += cleanChunk;
+                    subject.next({ conversationId: convId, content: this.cleanContent(fullContent), done: false });
+                  }
+                }
+              } catch {
+                if (data && data !== '{}') {
+                  const cleanChunk = this.cleanContent(data);
+                  if (cleanChunk) {
+                    fullContent += cleanChunk;
+                    subject.next({ conversationId: convId, content: this.cleanContent(fullContent), done: false });
+                  }
+                }
+              }
+            }
+          }
+        }
+      } catch (error) {
+        subject.error(error);
+      }
+    }).catch(error => {
+      subject.error(error);
+    });
+
+    return subject.asObservable();
   }
 
   getConversation(conversationId: string): Observable<Conversation> {
@@ -204,5 +341,23 @@ export class ChatService {
     }
     
     return throwError(() => new Error(errorMessage));
+  }
+
+  /**
+   * Clean content by removing [DONE] markers and other artifacts
+   * Does NOT trim to preserve spaces between streaming chunks
+   */
+  private cleanContent(content: string): string {
+    if (!content) return '';
+    return content
+      .replace(/\[DONE\]/g, '')  // Remove [DONE] marker
+      .replace(/data:\s*\[DONE\]/g, '');  // Remove SSE formatted [DONE]
+  }
+
+  /**
+   * Clean and trim final content (for saving and display)
+   */
+  private cleanFinalContent(content: string): string {
+    return this.cleanContent(content).trim();
   }
 }
