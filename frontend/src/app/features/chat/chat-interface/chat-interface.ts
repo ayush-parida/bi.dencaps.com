@@ -307,11 +307,41 @@ export class ChatInterfaceComponent implements OnInit, OnDestroy {
 
   tryParseStructuredContent(content: string): any {
     try {
-      const parsed = JSON.parse(content);
-      // Only return if it's a valid structured response (has items array)
+      // Strip markdown code fences if present
+      let jsonStr = content.trim();
+      const codeBlockMatch = jsonStr.match(/^```(?:json)?\s*\n?([\s\S]*?)\n?```$/);
+      if (codeBlockMatch) {
+        jsonStr = codeBlockMatch[1].trim();
+      }
+      
+      const parsed = JSON.parse(jsonStr);
+      
+      // Check if it's already a valid structured response (has items array)
       if (parsed && typeof parsed === 'object' && Array.isArray(parsed.items) && parsed.items.length > 0) {
         return parsed;
       }
+      
+      // Check if it's a chart data object (has type, labels, datasets)
+      if (parsed && typeof parsed === 'object' && 
+          parsed.type && 
+          Array.isArray(parsed.labels) && 
+          Array.isArray(parsed.datasets)) {
+        // Wrap chart data in structured response format
+        return {
+          items: [
+            {
+              type: 'chart',
+              data: {
+                chart_type: parsed.type, // 'line', 'bar', 'pie'
+                title: parsed.title,
+                labels: parsed.labels,
+                datasets: parsed.datasets
+              }
+            }
+          ]
+        };
+      }
+      
       return null;
     } catch {
       return null;

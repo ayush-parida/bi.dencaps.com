@@ -11,7 +11,8 @@ interface ChartData {
   type: 'pie' | 'bar' | 'line' | 'doughnut';
   title?: string;
   labels: string[];
-  data: number[];
+  data?: number[];
+  datasets?: Array<{ label: string; data: number[] }>;
   colors?: string[];
 }
 
@@ -132,16 +133,69 @@ interface ChartData {
       color: #d63384;
     }
 
+    :host ::ng-deep .markdown-content .code-block-wrapper {
+      position: relative;
+      margin: 0.75rem 0;
+    }
+
+    :host ::ng-deep .markdown-content .code-block-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background-color: #2d2d2d;
+      color: #d4d4d4;
+      padding: 0.5rem 1rem;
+      border-radius: 8px 8px 0 0;
+      border-bottom: 1px solid #3e3e3e;
+    }
+
+    :host ::ng-deep .markdown-content .code-block-lang {
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      color: #858585;
+    }
+
+    :host ::ng-deep .markdown-content .copy-button {
+      background: transparent;
+      border: 1px solid #4a4a4a;
+      color: #d4d4d4;
+      padding: 0.25rem 0.75rem;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 0.75rem;
+      display: flex;
+      align-items: center;
+      gap: 0.25rem;
+      transition: all 0.2s ease;
+    }
+
+    :host ::ng-deep .markdown-content .copy-button:hover {
+      background-color: #3e3e3e;
+      border-color: #667eea;
+      color: #667eea;
+    }
+
+    :host ::ng-deep .markdown-content .copy-button.copied {
+      background-color: #198754;
+      border-color: #198754;
+      color: white;
+    }
+
     :host ::ng-deep .markdown-content pre {
       background-color: #1e1e1e;
       color: #d4d4d4;
       padding: 1rem;
-      border-radius: 8px;
+      border-radius: 0 0 8px 8px;
       overflow-x: auto;
-      margin: 0.75rem 0;
+      margin: 0;
       font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
       font-size: 0.9em;
       line-height: 1.5;
+    }
+
+    :host ::ng-deep .markdown-content .code-block-wrapper.no-lang pre {
+      border-radius: 8px;
     }
 
     :host ::ng-deep .markdown-content pre code {
@@ -257,12 +311,48 @@ interface ChartData {
       border: 1px solid #e1e8ed;
     }
 
+    :host ::ng-deep .markdown-content .chart-container .chart-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 1rem;
+    }
+
     :host ::ng-deep .markdown-content .chart-container .chart-title {
-      text-align: center;
+      margin: 0;
       font-size: 1.1em;
       font-weight: 600;
       color: #333;
-      margin-bottom: 1rem;
+    }
+
+    :host ::ng-deep .markdown-content .chart-container .download-chart-btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0.5rem;
+      background: transparent;
+      color: #666;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    :host ::ng-deep .markdown-content .chart-container .download-chart-btn:hover {
+      background: #f5f5f5;
+      color: #0066cc;
+      border-color: #0066cc;
+      transform: translateY(-1px);
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+    }
+
+    :host ::ng-deep .markdown-content .chart-container .download-chart-btn:active {
+      transform: translateY(0);
+    }
+
+    :host ::ng-deep .markdown-content .chart-container .download-chart-btn svg {
+      width: 18px;
+      height: 18px;
     }
 
     :host ::ng-deep .markdown-content .chart-container canvas {
@@ -298,6 +388,7 @@ export class MarkdownRendererComponent implements OnChanges, AfterViewChecked {
     if (this.needsEventBinding && this.markdownContainer) {
       this.bindAccordionEvents();
       this.renderPendingCharts();
+      this.attachCopyButtons();
       this.needsEventBinding = false;
     }
   }
@@ -309,58 +400,78 @@ export class MarkdownRendererComponent implements OnChanges, AfterViewChecked {
         const ctx = canvas.getContext('2d');
         if (ctx) {
           const isPieOrDoughnut = data.type === 'pie' || data.type === 'doughnut';
-          const isBarOrLine = data.type === 'bar' || data.type === 'line';
+          const hasMultipleDatasets = data.datasets && data.datasets.length > 0;
+          
+          let datasets: any[];
+          
+          if (hasMultipleDatasets) {
+            // Multi-dataset chart (stacked bar, grouped bar, multi-line)
+            const colors = this.getDefaultColors(data.datasets!.length);
+            datasets = data.datasets!.map((dataset, index) => ({
+              label: dataset.label,
+              data: dataset.data,
+              backgroundColor: colors[index],
+              borderColor: data.type === 'line' ? colors[index] : (isPieOrDoughnut ? '#fff' : colors[index]),
+              borderWidth: isPieOrDoughnut ? 2 : 1,
+              ...(data.type === 'line' && {
+                fill: false,
+                tension: 0.3,
+                pointBackgroundColor: colors[index],
+                pointRadius: 5,
+                pointHoverRadius: 7
+              })
+            }));
+          } else {
+            // Single dataset chart
+            const colors = isPieOrDoughnut || data.type === 'bar'
+              ? (data.colors || this.getDefaultColors(data.data!.length))
+              : (data.colors?.[0] || '#667eea');
+            
+            datasets = [{
+              label: data.title || 'Value',
+              data: data.data!,
+              backgroundColor: colors,
+              borderColor: isPieOrDoughnut ? '#fff' : colors,
+              borderWidth: isPieOrDoughnut ? 2 : 1,
+              ...(data.type === 'line' && {
+                fill: false,
+                tension: 0.3,
+                pointBackgroundColor: data.colors?.[0] || '#667eea',
+                pointRadius: 5,
+                pointHoverRadius: 7
+              })
+            }];
+          }
           
           const config: ChartConfiguration = {
             type: data.type,
             data: {
               labels: data.labels,
-              datasets: [{
-                label: data.title || 'Value',
-                data: data.data,
-                backgroundColor: isPieOrDoughnut 
-                  ? (data.colors || this.getDefaultColors(data.data.length))
-                  : (data.colors?.[0] || '#667eea'),
-                borderColor: isPieOrDoughnut ? '#fff' : (data.colors?.[0] || '#667eea'),
-                borderWidth: isPieOrDoughnut ? 2 : 1,
-                ...(data.type === 'line' && {
-                  fill: false,
-                  tension: 0.3,
-                  pointBackgroundColor: data.colors?.[0] || '#667eea',
-                  pointRadius: 5,
-                  pointHoverRadius: 7
-                })
-              }]
+              datasets: datasets
             },
             options: {
               responsive: true,
               maintainAspectRatio: true,
               indexAxis: 'x',
-              plugins: {
-                legend: {
-                  display: isPieOrDoughnut,
-                  position: 'right',
-                  labels: {
-                    padding: 15,
-                    usePointStyle: true,
-                    font: { size: 12 }
-                  }
-                },
-                tooltip: {
-                  callbacks: {
-                    label: (context) => {
-                      const value = context.raw as number;
-                      if (isPieOrDoughnut) {
-                        const total = (context.dataset.data as number[]).reduce((a, b) => a + b, 0);
-                        const percentage = ((value / total) * 100).toFixed(1);
-                        return `${context.label}: ₹${value.toLocaleString('en-IN')} (${percentage}%)`;
-                      }
-                      return `${context.label}: ₹${value.toLocaleString('en-IN')}`;
+              ...(hasMultipleDatasets && data.type === 'bar' && {
+                scales: {
+                  x: { 
+                    stacked: true,
+                    grid: { display: false }
+                  },
+                  y: { 
+                    stacked: true,
+                    beginAtZero: true,
+                    ticks: {
+                      callback: (value) => `₹${Number(value).toLocaleString('en-IN')}`
+                    },
+                    grid: {
+                      color: 'rgba(0, 0, 0, 0.1)'
                     }
                   }
                 }
-              },
-              ...(isBarOrLine && {
+              }),
+              ...(!hasMultipleDatasets && (data.type === 'bar' || data.type === 'line') && {
                 scales: {
                   y: {
                     beginAtZero: true,
@@ -377,7 +488,31 @@ export class MarkdownRendererComponent implements OnChanges, AfterViewChecked {
                     }
                   }
                 }
-              })
+              }),
+              plugins: {
+                legend: {
+                  display: isPieOrDoughnut || hasMultipleDatasets,
+                  position: isPieOrDoughnut ? 'right' : 'top',
+                  labels: {
+                    padding: 15,
+                    usePointStyle: true,
+                    font: { size: 12 }
+                  }
+                },
+                tooltip: {
+                  callbacks: {
+                    label: (context) => {
+                      const value = context.raw as number;
+                      if (isPieOrDoughnut) {
+                        const total = (context.dataset.data as number[]).reduce((a, b) => a + b, 0);
+                        const percentage = ((value / total) * 100).toFixed(1);
+                        return `${context.label}: ₹${value.toLocaleString('en-IN')} (${percentage}%)`;
+                      }
+                      return `${context.dataset.label}: ₹${value.toLocaleString('en-IN')}`;
+                    }
+                  }
+                }
+              }
             }
           };
           
@@ -413,8 +548,17 @@ export class MarkdownRendererComponent implements OnChanges, AfterViewChecked {
       // Check if it's a valid chart data structure
       let chartData: ChartData | null = null;
       
-      if (parsed.type && parsed.labels && (parsed.data || parsed.values)) {
-        // Standard chart format
+      if (parsed.type && parsed.labels && parsed.datasets && Array.isArray(parsed.datasets)) {
+        // Multi-dataset format (for stacked/grouped charts)
+        chartData = {
+          type: parsed.type,
+          title: parsed.title,
+          labels: parsed.labels,
+          datasets: parsed.datasets,
+          colors: parsed.colors
+        };
+      } else if (parsed.type && parsed.labels && (parsed.data || parsed.values)) {
+        // Standard single-dataset chart format
         chartData = {
           type: parsed.type,
           title: parsed.title,
@@ -465,12 +609,33 @@ export class MarkdownRendererComponent implements OnChanges, AfterViewChecked {
         }
       }
       
-      if (chartData && chartData.labels.length > 0 && chartData.data.length > 0) {
+      if (chartData && chartData.labels.length > 0 && (
+        (chartData.data && chartData.data.length > 0) || 
+        (chartData.datasets && chartData.datasets.length > 0)
+      )) {
         const chartId = `chart-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
         this.pendingCharts.push({ id: chartId, data: chartData });
         
+        const downloadBtnHtml = `
+          <button class="download-chart-btn" onclick="this.closest('.chart-container').querySelector('canvas').toBlob(blob => {
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.download = '${(chartData.title || 'chart').replace(/[^a-z0-9]/gi, '_').toLowerCase()}.png';
+            link.href = url;
+            link.click();
+            URL.revokeObjectURL(url);
+          })" title="Download chart as image">
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+              <polyline points="7 10 12 15 17 10"></polyline>
+              <line x1="12" y1="15" x2="12" y2="3"></line>
+            </svg>
+          </button>
+        `;
+        
         const titleHtml = chartData.title ? `<div class="chart-title">${chartData.title}</div>` : '';
-        return `<div class="chart-container">${titleHtml}<canvas id="${chartId}"></canvas></div>`;
+        const headerHtml = `<div class="chart-header">${titleHtml}${downloadBtnHtml}</div>`;
+        return `<div class="chart-container">${headerHtml}<canvas id="${chartId}"></canvas></div>`;
       }
       
       return null;
@@ -611,7 +776,24 @@ export class MarkdownRendererComponent implements OnChanges, AfterViewChecked {
     const codeBlocks: string[] = [];
     html = html.replace(/```(\w*)\n?([\s\S]*?)```/g, (_, lang, code) => {
       const escaped = code.replace(/</g, '&lt;').replace(/>/g, '&gt;');
-      codeBlocks.push(`<pre><code class="language-${lang}">${escaped.trim()}</code></pre>`);
+      const codeId = `code-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      const langDisplay = lang || 'text';
+      codeBlocks.push(`
+        <div class="code-block-wrapper${!lang ? ' no-lang' : ''}">
+          ${lang ? `
+          <div class="code-block-header">
+            <span class="code-block-lang">${langDisplay}</span>
+            <button class="copy-button" data-code-id="${codeId}" onclick="this.copyCode('${codeId}')">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+              </svg>
+              <span class="copy-text">Copy</span>
+            </button>
+          </div>` : ''}
+          <pre><code id="${codeId}" class="language-${lang}">${escaped.trim()}</code></pre>
+        </div>
+      `);
       return `\n%%CODEBLOCK${codeBlocks.length - 1}%%\n`;
     });
 
@@ -848,6 +1030,55 @@ export class MarkdownRendererComponent implements OnChanges, AfterViewChecked {
       content = content.replace(/&lt;br&gt;/gi, '<br>');
       content = content.replace(/<br>/gi, '<br>');
       return content;
+    });
+  }
+
+  /**
+   * Attach event listeners to copy buttons
+   */
+  private attachCopyButtons(): void {
+    if (!this.markdownContainer) return;
+
+    const copyButtons = this.markdownContainer.nativeElement.querySelectorAll('.copy-button');
+    copyButtons.forEach((button: HTMLElement) => {
+      // Remove existing listeners by cloning
+      const newButton = button.cloneNode(true) as HTMLElement;
+      button.parentNode?.replaceChild(newButton, button);
+
+      newButton.addEventListener('click', (e) => {
+        e.preventDefault();
+        const codeId = newButton.getAttribute('data-code-id');
+        if (codeId) {
+          this.copyCodeToClipboard(codeId, newButton);
+        }
+      });
+    });
+  }
+
+  /**
+   * Copy code content to clipboard
+   */
+  private copyCodeToClipboard(codeId: string, button: HTMLElement): void {
+    const codeElement = document.getElementById(codeId);
+    if (!codeElement) return;
+
+    const code = codeElement.textContent || '';
+    navigator.clipboard.writeText(code).then(() => {
+      // Update button text
+      const textSpan = button.querySelector('.copy-text');
+      if (textSpan) {
+        const originalText = textSpan.textContent;
+        textSpan.textContent = 'Copied!';
+        button.classList.add('copied');
+
+        // Reset after 2 seconds
+        setTimeout(() => {
+          textSpan.textContent = originalText;
+          button.classList.remove('copied');
+        }, 2000);
+      }
+    }).catch(err => {
+      console.error('Failed to copy code:', err);
     });
   }
 }
