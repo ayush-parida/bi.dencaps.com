@@ -1,10 +1,16 @@
 use reqwest::Client;
+use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION, CONTENT_TYPE};
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
+use crate::config::AIProvider;
 use crate::models::StructuredResponse;
 
+// ============================================================================
+// OpenAI / LM Studio Compatible Request/Response Structures
+// ============================================================================
+
 #[derive(Debug, Serialize)]
-struct LMStudioRequest {
+struct ChatCompletionRequest {
     model: String,
     messages: Vec<Message>,
     temperature: f32,
@@ -18,7 +24,7 @@ struct Message {
 }
 
 #[derive(Debug, Deserialize)]
-struct LMStudioResponse {
+struct ChatCompletionResponse {
     choices: Vec<Choice>,
 }
 
@@ -27,15 +33,66 @@ struct Choice {
     message: Message,
 }
 
+// ============================================================================
+// Custom RAG API Request/Response Structures
+// ============================================================================
+
+#[derive(Debug, Serialize)]
+struct CustomRAGRequest {
+    message: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    session_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    top_k: Option<i32>,
+    temperature: f32,
+    max_tokens: i32,
+}
+
+#[derive(Debug, Deserialize)]
+struct CustomRAGResponse {
+    #[serde(default)]
+    session_id: Option<String>,
+    message: RAGMessage,
+    #[serde(default)]
+    sources: Vec<RAGSource>,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+struct RAGMessage {
+    #[serde(default)]
+    id: Option<String>,
+    #[serde(default)]
+    role: String,
+    content: String,
+    #[serde(default)]
+    sources: Vec<RAGSource>,
+    #[serde(default)]
+    created_at: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+struct RAGSource {
+    #[serde(default)]
+    content: String,
+    #[serde(default)]
+    metadata: Option<serde_json::Value>,
+}
+
+// ============================================================================
+// AI Service Implementation
+// ============================================================================
+
 #[derive(Clone)]
 pub struct AIService {
     client: Client,
     api_url: String,
     model_name: String,
+    provider: AIProvider,
+    api_key: Option<String>,
 }
 
 impl AIService {
-    pub fn new(api_url: String, model_name: String) -> Self {
+    pub fn new(api_url: String, model_name: String, provider: AIProvider, api_key: Option<String>) -> Self {
         let client = Client::builder()
             .timeout(Duration::from_secs(120))
             .build()
@@ -45,6 +102,208 @@ impl AIService {
             client,
             api_url,
             model_name,
+            provider,
+            api_key,
+        }
+    }
+
+    /// Get the provider name for logging purposes
+    fn provider_name(&self) -> &str {
+        match self.provider {
+            AIProvider::OpenAI => "OpenAI",
+            AIProvider::LMStudio => "LM Studio",
+            AIProvider::CustomRAG => "Custom RAG API",
+        }
+    }
+
+    // ========================================================================
+    // OpenAI / LM Studio Methods
+    // ========================================================================
+
+    /// Build request for OpenAI-compatible APIs (OpenAI, LM Studio)
+    fn build_openai_request(&self, request: &ChatCompletionRequest) -> Result<reqwest::RequestBuilder, String> {
+        let url = format!("{}/v1/chat/completions", self.api_url);
+        let mut headers = HeaderMap::new();
+        headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
+        
+        // Add authorization header for OpenAI or if API key is provided
+        if let Some(ref api_key) = self.api_key {
+            let auth_value = format!("Bearer {}", api_key);
+            headers.insert(
+                AUTHORIZATION,
+                HeaderValue::from_str(&auth_value)
+                    .map_err(|e| format!("Invalid API key format: {}", e))?
+            );
+        }
+        
+        Ok(self.client
+            .post(&url)
+            .headers(headers)
+            .json(request))
+    }
+
+    /// Send request to OpenAI-compatible APIs
+    async fn send_openai_request(&self, request: ChatCompletionRequest) -> Result<String, String> {
+        let req = self.build_openai_request(&request)?;
+        
+        let response = req
+            .send()
+            .await
+            .map_err(|e| format!("Failed to send request to {}: {}", self.provider_name(), e))?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
+            return Err(format!("{} API error ({}): {}", self.provider_name(), status, error_text));
+        }
+
+        let ai_response: ChatCompletionResponse = response
+            .json()
+            .await
+            .map_err(|e| format!("Failed to parse {} response: {}", self.provider_name(), e))?;
+
+        ai_response
+            .choices
+            .first()
+            .map(|choice| choice.message.content.clone())
+            .ok_or_else(|| "No response from AI model".to_string())
+    }
+
+    // ========================================================================
+    // Custom RAG API Methods
+    // ========================================================================
+
+    /// Build request for Custom RAG API
+    fn build_rag_request(&self, request: &CustomRAGRequest) -> Result<reqwest::RequestBuilder, String> {
+        let url = format!("{}/api/v1/chat", self.api_url);
+        let mut headers = HeaderMap::new();
+        headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
+        
+        // Add X-API-Key header for Custom RAG
+        if let Some(ref api_key) = self.api_key {
+            headers.insert(
+                HeaderValue::from_static("X-API-Key").to_str()
+                    .map(|_| "X-API-Key")
+                    .map(|name| reqwest::header::HeaderName::from_static(name))
+                    .unwrap_or(reqwest::header::HeaderName::from_static("x-api-key")),
+                HeaderValue::from_str(api_key)
+                    .map_err(|e| format!("Invalid API key format: {}", e))?
+            );
+        }
+        
+        Ok(self.client
+            .post(&url)
+            .headers(headers)
+            .json(request))
+    }
+
+    /// Send request to Custom RAG API
+    async fn send_rag_request(&self, query: &str, session_id: Option<String>, temperature: f32, max_tokens: i32) -> Result<String, String> {
+        let request = CustomRAGRequest {
+            message: query.to_string(),
+            session_id,
+            top_k: Some(5),
+            temperature,
+            max_tokens,
+        };
+
+        let url = format!("{}/api/v1/chat", self.api_url);
+        let mut headers = HeaderMap::new();
+        headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
+        
+        // Add X-API-Key header for Custom RAG
+        if let Some(ref api_key) = self.api_key {
+            headers.insert(
+                reqwest::header::HeaderName::from_static("x-api-key"),
+                HeaderValue::from_str(api_key)
+                    .map_err(|e| format!("Invalid API key format: {}", e))?
+            );
+        }
+
+        let response = self.client
+            .post(&url)
+            .headers(headers)
+            .json(&request)
+            .send()
+            .await
+            .map_err(|e| format!("Failed to send request to {}: {}", self.provider_name(), e))?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
+            return Err(format!("{} API error ({}): {}", self.provider_name(), status, error_text));
+        }
+
+        let rag_response: CustomRAGResponse = response
+            .json()
+            .await
+            .map_err(|e| format!("Failed to parse {} response: {}", self.provider_name(), e))?;
+
+        Ok(rag_response.message.content)
+    }
+
+    // ========================================================================
+    // Unified Chat Request Method
+    // ========================================================================
+
+    /// Send a chat request to the configured AI provider
+    async fn send_chat_request(&self, messages: Vec<Message>, temperature: f32, max_tokens: i32) -> Result<String, String> {
+        println!("##############################################start");
+        println!("Sending chat request to {} with model {}", self.provider_name(), self.model_name);
+        // Log request details for debugging
+        println!("Request URL: {}", match self.provider {
+            AIProvider::OpenAI | AIProvider::LMStudio => format!("{}/v1/chat/completions", self.api_url),
+            AIProvider::CustomRAG => format!("{}/api/v1/chat", self.api_url),
+        });
+        println!("Headers: Content-Type: application/json");
+        if let Some(ref api_key) = self.api_key {
+            match self.provider {
+            AIProvider::OpenAI | AIProvider::LMStudio => println!("Headers: Authorization: Bearer {}...", &api_key[..api_key.len().min(10)]),
+            AIProvider::CustomRAG => println!("Headers: X-API-Key: {}...", &api_key[..api_key.len().min(10)]),
+            }
+        }
+        println!("Payload: {:?}", serde_json::json!({
+            "model": &self.model_name,
+            "messages": &messages,
+            "temperature": temperature,
+            "max_tokens": max_tokens
+        }));
+        println!("##############################################end");
+        match self.provider {
+            AIProvider::OpenAI | AIProvider::LMStudio => {
+                let request = ChatCompletionRequest {
+                    model: self.model_name.clone(),
+                    messages,
+                    temperature,
+                    max_tokens,
+                };
+                self.send_openai_request(request).await
+            }
+            AIProvider::CustomRAG => {
+                // For RAG, combine messages into a single query
+                // Use the last user message as the primary query
+                let query = messages
+                    .iter()
+                    .filter(|m| m.role == "user")
+                    .last()
+                    .map(|m| m.content.clone())
+                    .unwrap_or_default();
+                
+                // Include context from system messages if present
+                let context: Vec<String> = messages
+                    .iter()
+                    .filter(|m| m.role == "system" || m.role == "assistant")
+                    .map(|m| m.content.clone())
+                    .collect();
+                
+                let full_query = if context.is_empty() {
+                    query
+                } else {
+                    format!("Context:\n{}\n\nQuery: {}", context.join("\n"), query)
+                };
+                
+                self.send_rag_request(&full_query, None, temperature, max_tokens).await
+            }
         }
     }
 
@@ -75,37 +334,7 @@ impl AIService {
             content: query.to_string(),
         });
 
-        let request = LMStudioRequest {
-            model: self.model_name.clone(),
-            messages,
-            temperature: 0.7,
-            max_tokens: 2000,
-        };
-
-        let response = self
-            .client
-            .post(&format!("{}/v1/chat/completions", self.api_url))
-            .json(&request)
-            .send()
-            .await
-            .map_err(|e| format!("Failed to send request to LM Studio: {}", e))?;
-
-        if !response.status().is_success() {
-            let status = response.status();
-            let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
-            return Err(format!("LM Studio API error ({}): {}", status, error_text));
-        }
-
-        let ai_response: LMStudioResponse = response
-            .json()
-            .await
-            .map_err(|e| format!("Failed to parse LM Studio response: {}", e))?;
-
-        ai_response
-            .choices
-            .first()
-            .map(|choice| choice.message.content.clone())
-            .ok_or_else(|| "No response from AI model".to_string())
+        self.send_chat_request(messages, 0.7, 2000).await
     }
 
     pub async fn generate_data_insights(
@@ -160,39 +389,8 @@ impl AIService {
             content: message.to_string(),
         });
 
-        let request = LMStudioRequest {
-            model: self.model_name.clone(),
-            messages,
-            temperature: 0.7,
-            max_tokens: 2000,
-        };
-        let request_url = format!("{}/v1/chat/completions", self.api_url);
-        println!("Request URL: {}", request_url);
-
-        let response = self
-            .client
-            .post(&format!("{}/v1/chat/completions", self.api_url))
-            .json(&request)
-            .send()
-            .await
-            .map_err(|e| format!("Failed to send request to LM Studio: {}", e))?;
-
-        if !response.status().is_success() {
-            let status = response.status();
-            let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
-            return Err(format!("LM Studio API error ({}): {}", status, error_text));
-        }
-
-        let ai_response: LMStudioResponse = response
-            .json()
-            .await
-            .map_err(|e| format!("Failed to parse LM Studio response: {}", e))?;
-
-        ai_response
-            .choices
-            .first()
-            .map(|choice| choice.message.content.clone())
-            .ok_or_else(|| "No response from AI model".to_string())
+        println!("Sending request to {} API: {}", self.provider_name(), self.api_url);
+        self.send_chat_request(messages, 0.7, 2000).await
     }
 
     pub async fn process_chat_message_structured(
@@ -234,37 +432,7 @@ impl AIService {
             content: message.to_string(),
         });
 
-        let request = LMStudioRequest {
-            model: self.model_name.clone(),
-            messages,
-            temperature: 0.7,
-            max_tokens: 3000,
-        };
-
-        let response = self
-            .client
-            .post(&format!("{}/v1/chat/completions", self.api_url))
-            .json(&request)
-            .send()
-            .await
-            .map_err(|e| format!("Failed to send request to LM Studio: {}", e))?;
-
-        if !response.status().is_success() {
-            let status = response.status();
-            let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
-            return Err(format!("LM Studio API error ({}): {}", status, error_text));
-        }
-
-        let ai_response: LMStudioResponse = response
-            .json()
-            .await
-            .map_err(|e| format!("Failed to parse LM Studio response: {}", e))?;
-
-        let content = ai_response
-            .choices
-            .first()
-            .map(|choice| choice.message.content.clone())
-            .ok_or_else(|| "No response from AI model".to_string())?;
+        let content = self.send_chat_request(messages, 0.7, 3000).await?;
 
         // Parse the structured response
         self.parse_and_validate_structured_response(&content)

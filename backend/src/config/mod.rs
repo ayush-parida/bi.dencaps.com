@@ -1,5 +1,26 @@
 use std::env;
 
+#[derive(Debug, Clone, PartialEq)]
+pub enum AIProvider {
+    /// LM Studio - for local development and testing (OpenAI-compatible API)
+    LMStudio,
+    /// OpenAI - for production use
+    OpenAI,
+    /// Custom RAG API - for production use with custom endpoint
+    CustomRAG,
+}
+
+impl AIProvider {
+    pub fn from_str(s: &str) -> Self {
+        match s.to_lowercase().as_str() {
+            "openai" => AIProvider::OpenAI,
+            "lmstudio" | "lm_studio" | "lm-studio" => AIProvider::LMStudio,
+            "custom" | "custom_rag" | "customrag" | "rag" => AIProvider::CustomRAG,
+            _ => AIProvider::LMStudio, // Default to LMStudio for development
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct Config {
     pub server_host: String,
@@ -10,8 +31,11 @@ pub struct Config {
     pub jwt_secret: String,
     pub jwt_expiration: i64,
     pub jwt_refresh_expiration: i64,
-    pub lm_studio_api_url: String,
-    pub lm_studio_model_name: String,
+    // AI Provider Configuration
+    pub ai_provider: AIProvider,
+    pub ai_api_url: String,
+    pub ai_model_name: String,
+    pub ai_api_key: Option<String>,
     pub rate_limit_requests: usize,
     pub rate_limit_window_secs: u64,
     pub chat_rate_limit_messages: usize,
@@ -53,10 +77,36 @@ impl Config {
             .parse::<i64>()
             .map_err(|_| "Invalid JWT_REFRESH_EXPIRATION")?;
 
-        let lm_studio_api_url = env::var("LM_STUDIO_API_URL")
-            .map_err(|_| "LM_STUDIO_API_URL must be set")?;
-        let lm_studio_model_name = env::var("LM_STUDIO_MODEL_NAME")
-            .unwrap_or_else(|_| "GPT-OSS-20B".to_string());
+        // AI Provider configuration - supports LMStudio (dev), OpenAI (prod), CustomRAG (prod)
+        let ai_provider = AIProvider::from_str(
+            &env::var("AI_PROVIDER").unwrap_or_else(|_| "lmstudio".to_string())
+        );
+        
+        // Get API URL based on provider or use unified AI_API_URL
+        let ai_api_url = env::var("AI_API_URL")
+            .or_else(|_| env::var("LM_STUDIO_API_URL"))
+            .or_else(|_| env::var("OPENAI_API_URL"))
+            .unwrap_or_else(|_| match ai_provider {
+                AIProvider::OpenAI => "https://api.openai.com".to_string(),
+                AIProvider::LMStudio => "http://localhost:1234".to_string(),
+                AIProvider::CustomRAG => "http://localhost:8001".to_string(),
+            });
+        
+        // Get model name based on provider or use unified AI_MODEL_NAME
+        // Note: CustomRAG doesn't use model_name but we keep it for consistency
+        let ai_model_name = env::var("AI_MODEL_NAME")
+            .or_else(|_| env::var("LM_STUDIO_MODEL_NAME"))
+            .or_else(|_| env::var("OPENAI_MODEL_NAME"))
+            .unwrap_or_else(|_| match ai_provider {
+                AIProvider::OpenAI => "gpt-4".to_string(),
+                AIProvider::LMStudio => "GPT-OSS-20B".to_string(),
+                AIProvider::CustomRAG => "default".to_string(),
+            });
+        
+        // API Key (required for OpenAI and CustomRAG, optional for LMStudio)
+        let ai_api_key = env::var("AI_API_KEY")
+            .or_else(|_| env::var("OPENAI_API_KEY"))
+            .ok();
 
         let rate_limit_requests = env::var("RATE_LIMIT_REQUESTS")
             .unwrap_or_else(|_| "100".to_string())
@@ -95,8 +145,10 @@ impl Config {
             jwt_secret,
             jwt_expiration,
             jwt_refresh_expiration,
-            lm_studio_api_url,
-            lm_studio_model_name,
+            ai_provider,
+            ai_api_url,
+            ai_model_name,
+            ai_api_key,
             rate_limit_requests,
             rate_limit_window_secs,
             chat_rate_limit_messages,

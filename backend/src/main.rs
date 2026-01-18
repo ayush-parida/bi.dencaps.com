@@ -42,9 +42,12 @@ async fn main() -> std::io::Result<()> {
     ));
 
     // Initialize AI service
+    println!("Initializing AI service with provider: {:?}", config.ai_provider);
     let ai_service = services::AIService::new(
-        config.lm_studio_api_url.clone(),
-        config.lm_studio_model_name.clone(),
+        config.ai_api_url.clone(),
+        config.ai_model_name.clone(),
+        config.ai_provider.clone(),
+        config.ai_api_key.clone(),
     );
 
     // Initialize services
